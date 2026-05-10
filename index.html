@@ -112,9 +112,9 @@
     }
 
     .page {
-      width: min(1500px, calc(100% - 28px));
+      width: min(1760px, calc(100% - 20px));
       margin: 0 auto;
-      padding: 20px 0 36px;
+      padding: 18px 0 32px;
     }
 
     .masthead {
@@ -264,7 +264,7 @@
 
     .workspace {
       display: grid;
-      grid-template-columns: 300px minmax(0, 1fr);
+      grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
       gap: 18px;
       align-items: start;
     }
@@ -493,7 +493,15 @@
       display: grid;
       grid-template-columns: 1fr;
       gap: 14px;
-      margin-bottom: 18px;
+    }
+
+    .workspace-summary,
+    .workspace-body {
+      min-width: 0;
+    }
+
+    .workspace-body {
+      grid-column: 1 / -1;
     }
 
     .detail-heading {
@@ -1258,8 +1266,8 @@
 
     @media (max-width: 620px) {
       .page {
-        width: min(100% - 16px, 1500px);
-        padding-top: 16px;
+        width: min(1760px, calc(100% - 16px));
+        padding-top: 14px;
       }
 
       .panel-body,
@@ -1354,32 +1362,34 @@
         </div>
       </aside>
 
-      <section class="detail-column">
-        <section class="panel">
-          <div class="panel-body">
-            <div class="summary-grid">
-              <div class="detail-heading">
-                <span class="eyebrow" id="speechMode">Speech</span>
-                <h1 class="detail-title" id="speechTitle">Select a speech</h1>
-                <div class="meta-row">
-                  <span class="status-chip" id="speechStatusChip" data-status="idea">Idea</span>
-                  <span class="meta-chip" id="speechGoalChip">Goal</span>
-                  <span class="meta-chip" id="speechCountChip">0 runs</span>
-                </div>
-                <p class="body-copy" id="speechIdea">Choose a speech from the left.</p>
-                <div class="tag-row" id="speechTags"></div>
-                <div class="button-row" id="detailActionRow"></div>
+      <section class="panel workspace-summary">
+        <div class="panel-body">
+          <div class="summary-grid">
+            <div class="detail-heading">
+              <span class="eyebrow" id="speechMode">Speech</span>
+              <h1 class="detail-title" id="speechTitle">Select a speech</h1>
+              <div class="meta-row">
+                <span class="status-chip" id="speechStatusChip" data-status="idea">Idea</span>
+                <span class="meta-chip" id="speechGoalChip">Goal</span>
+                <span class="meta-chip" id="speechCountChip">0 runs</span>
               </div>
-
-              <div class="focus-card" id="focusCard"></div>
+              <p class="body-copy" id="speechIdea">Choose a speech from the left.</p>
+              <div class="tag-row" id="speechTags"></div>
+              <div class="button-row" id="detailActionRow"></div>
             </div>
 
-            <div class="detail-layout">
-              <div class="tab-strip" id="tabBar" aria-label="Speech sections"></div>
-              <section class="tab-panel" id="tabContent"></section>
-            </div>
+            <div class="focus-card" id="focusCard"></div>
           </div>
-        </section>
+        </div>
+      </section>
+
+      <section class="panel workspace-body">
+        <div class="panel-body">
+          <div class="detail-layout">
+            <div class="tab-strip" id="tabBar" aria-label="Speech sections"></div>
+            <section class="tab-panel" id="tabContent"></section>
+          </div>
+        </div>
       </section>
     </section>
   </main>
