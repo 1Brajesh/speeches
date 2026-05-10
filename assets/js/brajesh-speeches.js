@@ -653,10 +653,13 @@ function formatDateTime(value) {
   }).format(date);
 }
 
-function speechWordCount(speech) {
-  const version = getSelectedVersionForSpeech(speech);
+function versionWordCount(version) {
   if (!version?.speechBody) return 0;
   return String(version.speechBody).trim().split(/\s+/).filter(Boolean).length;
+}
+
+function speechWordCount(speech) {
+  return versionWordCount(getSelectedVersionForSpeech(speech));
 }
 
 function excerpt(text, length = 130) {
@@ -1090,6 +1093,7 @@ function renderVersionsTab(speech) {
                   <div class="timeline-meta">
                     <span>${displayText(`Last edited ${formatDateTime(version.updatedAt)}`)}</span>
                     <span>${version.estimatedMinutes} min</span>
+                    <span>${versionWordCount(version)} words</span>
                     <span>${version.rehearsalBullets.length} bullets</span>
                   </div>
                   <p class="helper-copy">${displayText(version.revisionNote, "No revision note.")}</p>
