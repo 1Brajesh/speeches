@@ -2672,6 +2672,25 @@ function prevRehearsalBullet() {
   renderRehearsalScreen();
 }
 
+function handleFullscreenBodyClick(event) {
+  const bounds = elements.fullscreenBody.getBoundingClientRect();
+  const clickX = Number(event?.clientX);
+
+  if (!Number.isFinite(clickX) || bounds.width <= 0) {
+    nextRehearsalBullet();
+    return;
+  }
+
+  const midpoint = bounds.left + (bounds.width / 2);
+
+  if (clickX < midpoint) {
+    prevRehearsalBullet();
+    return;
+  }
+
+  nextRehearsalBullet();
+}
+
 function renderApp() {
   renderCounts();
   renderFilters();
@@ -2810,9 +2829,7 @@ elements.deleteEditorButton.addEventListener("click", () => {
 
 elements.editorForm.addEventListener("submit", saveEditor);
 
-elements.fullscreenBody.addEventListener("click", () => {
-  nextRehearsalBullet();
-});
+elements.fullscreenBody.addEventListener("click", handleFullscreenBodyClick);
 
 elements.nextBulletButton.addEventListener("click", (event) => {
   event.stopPropagation();

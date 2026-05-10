@@ -73,8 +73,8 @@ Local context note for sessions started in the standalone `speeches` repo.
   - the run result is `scheduled`
 - Rehearsal mode shows one bullet at a time.
 - Rehearsal navigation:
-  - click/tap or `Space` / right arrow = next
-  - left arrow = previous
+  - right-side click/tap or `Space` / right arrow = next
+  - left-side click/tap or left arrow = previous
   - `Escape` = exit
 
 ## Recent UI State
@@ -101,7 +101,7 @@ Local context note for sessions started in the standalone `speeches` repo.
 
 - Important: when speeches UI changes appear not to register after deploy, check for stale cached JS.
 - The speeches page currently cache-busts the module URL in `index.html`:
-  - `./assets/js/brajesh-speeches.js?v=20260510c`
+  - `./assets/js/brajesh-speeches.js?v=20260510d`
 - If future speeches JS changes appear missing in production, bump that query-string version.
 
 ## Useful Starting Point
