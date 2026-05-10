@@ -10,6 +10,7 @@ Read [README.md](./README.md) first for fast project context before exploring th
 ## Working Rules
 - For user-facing changes, commit and push `origin main` by default unless the user explicitly says to keep work local.
 - Do not stop at local edits when the request is clearly meant to go live.
+- Minimize back-and-forth questions. Make reasonable assumptions to keep the flow moving unless the choice is high-risk, destructive, or blocked by missing credentials or permissions.
 - If `assets/js/brajesh-speeches.js` changes, bump the cache-bust query string in `index.html`.
 - For Supabase schema changes:
   - add a migration under `supabase/`
@@ -21,4 +22,3 @@ Read [README.md](./README.md) first for fast project context before exploring th
 - Prefer `rg` / `rg --files` for search.
 - Update local memory when major behavior, deployment workflow, or schema state changes.
 - Before shutdown, save any important repo-specific context to `README.md` or shared memory if it is not already captured.
-
