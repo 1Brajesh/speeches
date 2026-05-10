@@ -469,14 +469,26 @@ function isPanelOpen(key) {
   return Boolean(state.panels[key]);
 }
 
-function autoSizeRichTextarea(textarea) {
+function autoSizeRichTextarea(textarea, options = {}) {
+  const { allowShrink = true } = options;
+
   if (!(textarea instanceof HTMLTextAreaElement) || textarea.dataset.rich !== "true") {
     return;
   }
 
-  textarea.style.height = "auto";
   const minHeight = Number.parseFloat(window.getComputedStyle(textarea).minHeight) || 0;
-  textarea.style.height = `${Math.max(minHeight, textarea.scrollHeight)}px`;
+  const currentHeight = Number.parseFloat(textarea.style.height) || textarea.getBoundingClientRect().height || 0;
+
+  if (allowShrink) {
+    textarea.style.height = "auto";
+  }
+
+  const nextHeight = Math.max(minHeight, textarea.scrollHeight);
+  if (!allowShrink && nextHeight <= currentHeight + 1) {
+    return;
+  }
+
+  textarea.style.height = `${nextHeight}px`;
 }
 
 function autoSizeRichTextareas(root = document) {
@@ -3659,7 +3671,7 @@ function handleEditorRichTextareaInput(event) {
   const textarea = event.target.closest("textarea[data-rich='true']");
   if (!textarea) return;
 
-  autoSizeRichTextarea(textarea);
+  autoSizeRichTextarea(textarea, { allowShrink: false });
 }
 
 elements.tabContent.addEventListener("input", handleScriptReadingInput);
