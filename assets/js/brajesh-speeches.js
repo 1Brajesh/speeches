@@ -112,6 +112,7 @@ const elements = {
   editorFields: document.querySelector("#editorFields"),
   editorFooterNote: document.querySelector("#editorFooterNote"),
   deleteEditorButton: document.querySelector("#deleteEditorButton"),
+  copyEditorButton: document.querySelector("#copyEditorButton"),
   closeEditorButton: document.querySelector("#closeEditorButton"),
   cancelEditorButton: document.querySelector("#cancelEditorButton"),
   saveEditorButton: document.querySelector("#saveEditorButton"),
@@ -2117,6 +2118,7 @@ function setEditorBusy(isBusy, busyLabel = "Saving...") {
   elements.closeEditorButton.disabled = isBusy;
   elements.cancelEditorButton.disabled = isBusy;
   elements.deleteEditorButton.disabled = isBusy;
+  elements.copyEditorButton.disabled = isBusy;
 
   if (isBusy) {
     setSaveButtonLabel(busyLabel, true);
@@ -2232,8 +2234,34 @@ function closeEditor() {
   setSaveButtonLabel(elements.saveEditorButton.dataset.defaultLabel || elements.saveEditorButton.textContent);
   elements.deleteEditorButton.hidden = true;
   elements.deleteEditorButton.textContent = "Delete Speech";
+  elements.copyEditorButton.hidden = true;
+  elements.copyEditorButton.disabled = false;
   setEditorStatus("");
   document.body.classList.remove("drawer-open");
+}
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const helper = document.createElement("textarea");
+  helper.value = text;
+  helper.setAttribute("readonly", "");
+  helper.style.position = "fixed";
+  helper.style.opacity = "0";
+  helper.style.pointerEvents = "none";
+  document.body.append(helper);
+  helper.focus();
+  helper.select();
+
+  const copied = document.execCommand("copy");
+  helper.remove();
+
+  if (!copied) {
+    throw new Error("Clipboard copy is not available in this browser.");
+  }
 }
 
 function renderOptions(options, selectedValue) {
@@ -2828,14 +2856,45 @@ function renderEditor() {
 
   const showSpeechDelete = state.editor.kind === "speech" && state.editor.intent === "edit" && Boolean(speech);
   const showPlaybookDelete = state.editor.kind === "playbook" && state.editor.intent === "edit" && Boolean(playbookEntry);
+  const showScriptCopy = state.editor.kind === "version";
   elements.deleteEditorButton.hidden = !(showSpeechDelete || showPlaybookDelete);
   elements.deleteEditorButton.textContent = showPlaybookDelete
     ? "Delete Principle"
     : (speech?.status === "idea" ? "Delete Idea" : "Delete Speech");
+  elements.copyEditorButton.hidden = !showScriptCopy;
+  elements.copyEditorButton.textContent = "Copy Speech";
 
   requestAnimationFrame(() => {
     elements.editorFields.querySelector("input, textarea, select")?.focus();
   });
+}
+
+async function copyEditorSpeechBody() {
+  if (editorBusy || state.editor.kind !== "version") {
+    return;
+  }
+
+  const bodyField = elements.editorFields.querySelector("textarea[data-rich='true']");
+  const text = multilineText(bodyField?.value || "");
+
+  if (!text) {
+    setEditorStatus("Nothing to copy yet.", "warn");
+    return;
+  }
+
+  const originalLabel = elements.copyEditorButton.textContent;
+  elements.copyEditorButton.disabled = true;
+  elements.copyEditorButton.textContent = "Copying...";
+
+  try {
+    await copyTextToClipboard(text);
+    setEditorStatus("Speech copied to clipboard.", "ok");
+  } catch (error) {
+    setEditorStatus(error.message || "Could not copy the speech.", "error");
+  } finally {
+    elements.copyEditorButton.disabled = false;
+    elements.copyEditorButton.textContent = originalLabel;
+  }
 }
 
 async function saveSpeech(formData) {
@@ -3715,6 +3774,10 @@ elements.deleteEditorButton.addEventListener("click", () => {
   }
 
   deleteSpeech();
+});
+
+elements.copyEditorButton.addEventListener("click", () => {
+  copyEditorSpeechBody();
 });
 
 elements.editorForm.addEventListener("submit", saveEditor);

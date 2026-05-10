@@ -95,6 +95,7 @@ Local context note for sessions started in the standalone `speeches` repo.
   - compare uses the version's authored base version first, and falls back to the previous version by time when no base version is set.
   - the selected version can be deleted from the `Versions` detail header when the speech has more than one version.
   - `Edit Script` uses a collapsible `Rehearsal Bullets` panel.
+  - `Edit Script` footer includes a `Copy Speech` action that copies the current draft text, including unsaved edits.
   - script text size is user-controlled with a `16-28` slider and stored in local browser storage.
   - script line spacing is also user-controlled with a persistent slider.
   - paragraph spacing in reading views is user-controlled with a persistent slider.
@@ -120,7 +121,7 @@ Local context note for sessions started in the standalone `speeches` repo.
 
 - Important: when speeches UI changes appear not to register after deploy, check for stale cached JS.
 - The speeches page currently cache-busts the module URL in `index.html`:
-  - `./assets/js/brajesh-speeches.js?v=20260510k`
+  - `./assets/js/brajesh-speeches.js?v=20260510l`
 - If future speeches JS changes appear missing in production, bump that query-string version.
 
 ## Useful Starting Point
