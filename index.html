@@ -1127,7 +1127,8 @@
     .editor-shell[data-layout="studio"] .editor-layout {
       min-height: calc(100vh - 36px);
       min-height: calc(100dvh - 36px);
-      grid-template-rows: auto auto minmax(0, 1fr);
+      display: flex;
+      flex-direction: column;
       gap: 20px;
     }
 
@@ -1152,11 +1153,16 @@
     }
 
     .editor-shell[data-layout="studio"] .editor-form {
+      flex: 1 1 auto;
       gap: 20px;
       align-content: start;
       min-height: 0;
       overflow: auto;
       padding-right: 4px;
+    }
+
+    .editor-shell[data-layout="studio"] .editor-layout > .button-row {
+      display: none;
     }
 
     .editor-grid {
@@ -1618,6 +1624,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260510h"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260510i"></script>
 </body>
 </html>
