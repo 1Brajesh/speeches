@@ -717,6 +717,75 @@
       font-family: var(--sans);
     }
 
+    .compare-grid {
+      align-items: start;
+    }
+
+    .compare-pane {
+      min-width: 0;
+      display: grid;
+      gap: 14px;
+    }
+
+    .compare-pane-head,
+    .compare-note-box .panel-head {
+      margin-bottom: 0;
+    }
+
+    .compare-context {
+      margin-top: 4px;
+    }
+
+    .compare-note-box[data-compare-state="changed"] {
+      border-color: rgba(123, 183, 255, 0.28);
+      box-shadow: inset 0 0 0 1px rgba(123, 183, 255, 0.08);
+    }
+
+    .compare-script-box {
+      height: min(68vh, 720px);
+    }
+
+    .compare-segment-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .compare-segment,
+    .compare-empty {
+      margin: 0;
+      white-space: pre-wrap;
+      line-height: 1.76;
+      font-family: var(--serif);
+      font-size: var(--script-text-size);
+    }
+
+    .compare-segment {
+      padding: 14px 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text);
+    }
+
+    .compare-segment[data-state="same"] {
+      border-color: rgba(255, 255, 255, 0.05);
+    }
+
+    .compare-segment[data-state="added"] {
+      border-color: rgba(138, 208, 166, 0.3);
+      background: rgba(138, 208, 166, 0.1);
+    }
+
+    .compare-segment[data-state="removed"] {
+      border-color: rgba(255, 157, 132, 0.32);
+      background: rgba(255, 157, 132, 0.1);
+    }
+
+    .compare-empty {
+      color: var(--faint);
+      font-style: italic;
+    }
+
     .bullet-card {
       display: grid;
       gap: 8px;
@@ -1458,6 +1527,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260510b"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260510c"></script>
 </body>
 </html>

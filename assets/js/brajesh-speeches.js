@@ -19,6 +19,7 @@ const state = {
   selectedSpeechId: null,
   selectedVersionId: null,
   selectedDeliveryId: null,
+  versionCompareOpen: false,
   tab: "overview",
   rehearsal: {
     speechId: null,
@@ -192,6 +193,7 @@ function resetSpeechState() {
   state.selectedSpeechId = null;
   state.selectedVersionId = null;
   state.selectedDeliveryId = null;
+  state.versionCompareOpen = false;
   state.rehearsal.speechId = null;
   state.rehearsal.versionId = null;
   state.rehearsal.index = 0;
@@ -662,6 +664,145 @@ function speechWordCount(speech) {
   return versionWordCount(getSelectedVersionForSpeech(speech));
 }
 
+function normalizeCompareText(value) {
+  return String(value ?? "")
+    .replace(/\r\n?/g, "\n")
+    .trim();
+}
+
+function splitCompareSegments(text) {
+  const normalized = normalizeCompareText(text);
+  if (!normalized) {
+    return [];
+  }
+
+  const paragraphs = normalized
+    .split(/\n\s*\n+/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  if (paragraphs.length > 1) {
+    return paragraphs;
+  }
+
+  return normalized
+    .split("\n")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
+
+function diffCompareSegments(previousSegments, nextSegments) {
+  const rowCount = previousSegments.length + 1;
+  const columnCount = nextSegments.length + 1;
+  const table = Array.from({ length: rowCount }, () => Array(columnCount).fill(0));
+
+  for (let row = 1; row < rowCount; row += 1) {
+    for (let column = 1; column < columnCount; column += 1) {
+      if (previousSegments[row - 1] === nextSegments[column - 1]) {
+        table[row][column] = table[row - 1][column - 1] + 1;
+      } else {
+        table[row][column] = Math.max(table[row - 1][column], table[row][column - 1]);
+      }
+    }
+  }
+
+  let row = previousSegments.length;
+  let column = nextSegments.length;
+  const operations = [];
+
+  while (row > 0 && column > 0) {
+    if (previousSegments[row - 1] === nextSegments[column - 1]) {
+      operations.push({ type: "same", text: previousSegments[row - 1] });
+      row -= 1;
+      column -= 1;
+      continue;
+    }
+
+    if (table[row - 1][column] >= table[row][column - 1]) {
+      operations.push({ type: "remove", text: previousSegments[row - 1] });
+      row -= 1;
+      continue;
+    }
+
+    operations.push({ type: "add", text: nextSegments[column - 1] });
+    column -= 1;
+  }
+
+  while (row > 0) {
+    operations.push({ type: "remove", text: previousSegments[row - 1] });
+    row -= 1;
+  }
+
+  while (column > 0) {
+    operations.push({ type: "add", text: nextSegments[column - 1] });
+    column -= 1;
+  }
+
+  operations.reverse();
+  return operations;
+}
+
+function buildVersionScriptCompare(previousVersion, selectedVersion) {
+  const previousSegments = splitCompareSegments(previousVersion?.speechBody);
+  const selectedSegments = splitCompareSegments(selectedVersion?.speechBody);
+  const operations = diffCompareSegments(previousSegments, selectedSegments);
+  const previousBlocks = [];
+  const selectedBlocks = [];
+  let addedCount = 0;
+  let removedCount = 0;
+
+  operations.forEach((operation) => {
+    if (operation.type === "same") {
+      previousBlocks.push({ state: "same", text: operation.text });
+      selectedBlocks.push({ state: "same", text: operation.text });
+      return;
+    }
+
+    if (operation.type === "remove") {
+      removedCount += 1;
+      previousBlocks.push({ state: "removed", text: operation.text });
+      return;
+    }
+
+    addedCount += 1;
+    selectedBlocks.push({ state: "added", text: operation.text });
+  });
+
+  return {
+    previousBlocks,
+    selectedBlocks,
+    addedCount,
+    removedCount,
+  };
+}
+
+function renderCompareBlocks(blocks = [], emptyText = "Nothing here yet.") {
+  if (!blocks.length) {
+    return `<p class="compare-empty">${displayText(emptyText)}</p>`;
+  }
+
+  return `
+    <div class="compare-segment-list">
+      ${blocks.map((block) => `
+        <p class="compare-segment" data-state="${block.state}">${displayText(block.text)}</p>
+      `).join("")}
+    </div>
+  `;
+}
+
+function formatSignedDelta(value, singular, plural = `${singular}s`) {
+  if (!value) {
+    return `No ${singular} change`;
+  }
+
+  const amount = Math.abs(value);
+  return `${value > 0 ? "+" : "-"}${amount} ${amount === 1 ? singular : plural}`;
+}
+
+function formatCountLabel(count, singular, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
 function excerpt(text, length = 130) {
   const cleaned = String(text || "").replace(/\s+/g, " ").trim();
   if (cleaned.length <= length) return cleaned;
@@ -765,6 +906,43 @@ function getLatestVersionForSpeech(speech, excludeVersionId = "") {
 
   const candidates = speech.versions.filter((version) => version.id !== excludeVersionId);
   return candidates.length ? candidates[candidates.length - 1] : null;
+}
+
+function getCompareReferenceVersion(speech, selectedVersion) {
+  if (!speech || !selectedVersion) {
+    return { version: null, mode: "none", label: "No comparison available." };
+  }
+
+  const basedOnVersion = selectedVersion.basedOn
+    ? getVersionById(speech, selectedVersion.basedOn)
+    : null;
+
+  if (basedOnVersion) {
+    return {
+      version: basedOnVersion,
+      mode: "base",
+      label: `Base version: ${basedOnVersion.label}`,
+      helper: "This draft already points to a specific base version, so compare uses that authored link first.",
+    };
+  }
+
+  const selectedIndex = speech.versions.findIndex((version) => version.id === selectedVersion.id);
+  if (selectedIndex > 0) {
+    const previousVersion = speech.versions[selectedIndex - 1];
+    return {
+      version: previousVersion,
+      mode: "previous",
+      label: `Previous version: ${previousVersion.label}`,
+      helper: "No base version is set, so compare falls back to the version edited just before this one.",
+    };
+  }
+
+  return {
+    version: null,
+    mode: "none",
+    label: "No earlier version to compare.",
+    helper: "This is the first version in the timeline.",
+  };
 }
 
 function setLibraryStatus(text, tone = "") {
@@ -1067,9 +1245,24 @@ function renderOverviewTab(speech) {
 function renderVersionsTab(speech) {
   const selectedVersion = getSelectedVersionForSpeech(speech);
   const basedOnVersion = selectedVersion?.basedOn ? getVersionById(speech, selectedVersion.basedOn) : null;
+  const compareReference = getCompareReferenceVersion(speech, selectedVersion);
+  const compareVersion = compareReference.version;
   const versionHistoryOpen = isPanelOpen("version-history");
   const canDeleteVersion = Boolean(selectedVersion) && speech.versions.length > 1;
   const editTimestampLabel = selectedVersion ? `Last edited ${formatDateTime(selectedVersion.updatedAt)}` : "No version selected";
+  const compareOpen = Boolean(state.versionCompareOpen && selectedVersion && compareVersion);
+  const compareData = compareOpen ? buildVersionScriptCompare(compareVersion, selectedVersion) : null;
+  const wordDelta = selectedVersion && compareVersion
+    ? versionWordCount(selectedVersion) - versionWordCount(compareVersion)
+    : 0;
+  const minuteDelta = selectedVersion && compareVersion
+    ? selectedVersion.estimatedMinutes - compareVersion.estimatedMinutes
+    : 0;
+  const bulletDelta = selectedVersion && compareVersion
+    ? selectedVersion.rehearsalBullets.length - compareVersion.rehearsalBullets.length
+    : 0;
+  const revisionNoteChanged = Boolean(compareVersion)
+    && normalizeCompareText(selectedVersion?.revisionNote) !== normalizeCompareText(compareVersion.revisionNote);
 
   return `
     <div class="reader-stack">
@@ -1112,6 +1305,9 @@ function renderVersionsTab(speech) {
             <span class="meta-chip">${displayText(editTimestampLabel)}</span>
             <button class="ghost-button" type="button" data-action="new-version">New Version</button>
             <button class="script-button" type="button" data-action="edit-version">Edit Script</button>
+            ${compareVersion
+              ? `<button class="ghost-button" type="button" data-action="toggle-version-compare" aria-pressed="${String(compareOpen)}">${compareOpen ? "Hide Compare" : "Compare"}</button>`
+              : `<span class="meta-chip">${displayText(compareReference.label)}</span>`}
             ${canDeleteVersion ? '<button class="danger-button" type="button" data-action="delete-version">Delete Version</button>' : '<span class="meta-chip">Keep at least 1 version</span>'}
           </div>
         </div>
@@ -1129,6 +1325,76 @@ function renderVersionsTab(speech) {
           <p class="body-copy" style="font-size: 1rem; font-family: var(--sans); line-height: 1.55;">${displayText(selectedVersion?.revisionNote, "No revision note.")}</p>
         </div>
       </div>
+
+      ${compareOpen ? `
+        <div class="card">
+          <div class="panel-head">
+            <div>
+              <h4>Compare Versions</h4>
+              <p class="helper-copy compare-context">Comparing ${displayText(selectedVersion?.label)} against ${displayText(compareVersion?.label)}. ${displayText(compareReference.helper || "")}</p>
+            </div>
+            <div class="button-row">
+              <span class="meta-chip">${displayText(compareReference.label)}</span>
+              <span class="meta-chip">${displayText(formatSignedDelta(wordDelta, "word"))}</span>
+              <span class="meta-chip">${displayText(formatSignedDelta(minuteDelta, "min", "min"))}</span>
+              <span class="meta-chip">${displayText(formatSignedDelta(bulletDelta, "bullet"))}</span>
+              <span class="meta-chip">${displayText(compareData?.addedCount ? `${formatCountLabel(compareData.addedCount, "new section")}` : "No new sections")}</span>
+              <span class="meta-chip">${displayText(compareData?.removedCount ? `${formatCountLabel(compareData.removedCount, "removed section")}` : "No removed sections")}</span>
+              <span class="meta-chip">${revisionNoteChanged ? "Revision note changed" : "Revision note unchanged"}</span>
+            </div>
+          </div>
+
+          <div class="two-up compare-grid">
+            <div class="compare-pane">
+              <div class="panel-head compare-pane-head">
+                <div>
+                  <h4>${displayText(compareVersion?.label, "Earlier Version")}</h4>
+                  <p class="helper-copy">Reference draft</p>
+                </div>
+                <div class="button-row">
+                  <span class="meta-chip">${displayText(`Last edited ${formatDateTime(compareVersion?.updatedAt)}`)}</span>
+                  <span class="meta-chip">${compareVersion?.estimatedMinutes || "-"} min</span>
+                  <span class="meta-chip">${versionWordCount(compareVersion)} words</span>
+                </div>
+              </div>
+              <div class="notes-box compare-note-box" data-compare-state="${revisionNoteChanged ? "changed" : "same"}">
+                <div class="panel-head">
+                  <h4>Revision Note</h4>
+                  <span class="meta-chip">${compareVersion?.rehearsalBullets.length || 0} bullets</span>
+                </div>
+                <p class="body-copy">${displayText(compareVersion?.revisionNote, "No revision note.")}</p>
+              </div>
+              <div class="script-box compare-script-box scroll-area">
+                ${renderCompareBlocks(compareData?.previousBlocks || [], "No speech body yet.")}
+              </div>
+            </div>
+
+            <div class="compare-pane">
+              <div class="panel-head compare-pane-head">
+                <div>
+                  <h4>${displayText(selectedVersion?.label, "Selected Version")}</h4>
+                  <p class="helper-copy">Current draft</p>
+                </div>
+                <div class="button-row">
+                  <span class="meta-chip">${displayText(`Last edited ${formatDateTime(selectedVersion?.updatedAt)}`)}</span>
+                  <span class="meta-chip">${selectedVersion?.estimatedMinutes || "-"} min</span>
+                  <span class="meta-chip">${versionWordCount(selectedVersion)} words</span>
+                </div>
+              </div>
+              <div class="notes-box compare-note-box" data-compare-state="${revisionNoteChanged ? "changed" : "same"}">
+                <div class="panel-head">
+                  <h4>Revision Note</h4>
+                  <span class="meta-chip">${selectedVersion?.rehearsalBullets.length || 0} bullets</span>
+                </div>
+                <p class="body-copy">${displayText(selectedVersion?.revisionNote, "No revision note.")}</p>
+              </div>
+              <div class="script-box compare-script-box scroll-area">
+                ${renderCompareBlocks(compareData?.selectedBlocks || [], "No speech body yet.")}
+              </div>
+            </div>
+          </div>
+        </div>
+      ` : ""}
     </div>
   `;
 }
@@ -2351,6 +2617,12 @@ function runAction(action) {
 
   if (action === "new-version" && speech) {
     openVersionEditor({ speechId: speech.id });
+    return;
+  }
+
+  if (action === "toggle-version-compare" && speech) {
+    state.versionCompareOpen = !state.versionCompareOpen;
+    renderApp();
     return;
   }
 
