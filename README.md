@@ -54,10 +54,14 @@ Local context note for sessions started in the standalone `speeches` repo.
 - `brajesh_speech_runs`
   - delivered instances / run history
   - date, venue, version used, feedback, evaluator notes, next actions
+- `brajesh_speech_playbook`
+  - reusable cross-speech speaking principles
+  - title, category, principle, why it works, tags, pinned state
 
 ## Main UI Areas
 
 - library with search and status filters
+- top-level playbook workspace for reusable principles
 - overview tab
 - versions tab
 - runs tab
@@ -68,6 +72,7 @@ Local context note for sessions started in the standalone `speeches` repo.
 - Creating a new speech also creates its first version.
 - Saving a version updates the speech's `active_version_id`.
 - The selected version can be deleted from `Versions`, but each speech keeps at least one version.
+- Pinned playbook principles appear inside script-writing editors.
 - Logging a run usually moves the speech to `delivered`, except when:
   - the speech is still `idea`
   - the run result is `scheduled`
@@ -80,6 +85,9 @@ Local context note for sessions started in the standalone `speeches` repo.
 ## Recent UI State
 
 - As of 2026-05-10:
+  - `Playbook` is a separate top-level workspace view, not a speech tab.
+  - `Playbook` entries can be created, edited, deleted, tagged, categorized, and pinned.
+  - pinned `Playbook` principles appear in the script-writing editors as drafting guidance.
   - `Versions` uses a collapsible `Version History` panel.
   - `Versions` shows explicit `Last edited` timestamps with local time.
   - `Versions` shows each listed draft's word count in `Version History`.
@@ -101,7 +109,7 @@ Local context note for sessions started in the standalone `speeches` repo.
 
 - Important: when speeches UI changes appear not to register after deploy, check for stale cached JS.
 - The speeches page currently cache-busts the module URL in `index.html`:
-  - `./assets/js/brajesh-speeches.js?v=20260510d`
+  - `./assets/js/brajesh-speeches.js?v=20260510e`
 - If future speeches JS changes appear missing in production, bump that query-string version.
 
 ## Useful Starting Point

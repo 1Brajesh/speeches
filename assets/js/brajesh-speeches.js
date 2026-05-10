@@ -14,11 +14,16 @@ const SCRIPT_TEXT_SIZE_DEFAULT = 20;
 const state = {
   user: null,
   speeches: [],
+  playbookEntries: [],
+  workspaceView: "speeches",
   search: "",
+  playbookSearch: "",
   filter: "all",
+  playbookFilter: "all",
   selectedSpeechId: null,
   selectedVersionId: null,
   selectedDeliveryId: null,
+  selectedPlaybookId: null,
   versionCompareOpen: false,
   tab: "overview",
   rehearsal: {
@@ -40,6 +45,7 @@ const state = {
     speechId: null,
     versionId: null,
     deliveryId: null,
+    playbookId: null,
     statusPreset: "draft",
     sourceVersionId: null,
   },
@@ -49,6 +55,7 @@ let pageReloadQueued = false;
 let editorBusy = false;
 let speechDeleteBusy = false;
 let versionDeleteBusy = false;
+let playbookDeleteBusy = false;
 
 const elements = {
   pageStatus: document.querySelector("#pageStatus"),
@@ -58,7 +65,10 @@ const elements = {
   sessionHint: document.querySelector("#sessionHint"),
   logoutButton: document.querySelector("#logoutButton"),
   adminIdentity: document.querySelector("#adminIdentity"),
+  workspaceToggleButton: document.querySelector("#workspaceToggleButton"),
   appShell: document.querySelector("#appShell"),
+  libraryEyebrow: document.querySelector("#libraryEyebrow"),
+  libraryTitle: document.querySelector("#libraryTitle"),
   searchInput: document.querySelector("#searchInput"),
   filterBar: document.querySelector("#filterBar"),
   totalCount: document.querySelector("#totalCount"),
@@ -79,6 +89,7 @@ const elements = {
   tabContent: document.querySelector("#tabContent"),
   newIdeaButton: document.querySelector("#newIdeaButton"),
   newSpeechButton: document.querySelector("#newSpeechButton"),
+  newPlaybookButton: document.querySelector("#newPlaybookButton"),
   editorShell: document.querySelector("#editorShell"),
   editorBackdrop: document.querySelector("#editorBackdrop"),
   editorModeLabel: document.querySelector("#editorModeLabel"),
@@ -130,6 +141,7 @@ function describeLoadError(error) {
     message.includes("brajesh_speeches")
     || message.includes("brajesh_speech_versions")
     || message.includes("brajesh_speech_runs")
+    || message.includes("brajesh_speech_playbook")
     || message.toLowerCase().includes("relation")
   ) {
     return "The speeches database schema is not installed yet.";
@@ -162,8 +174,10 @@ function updateIdentityUI() {
 function showLogin() {
   elements.loginPanel.hidden = false;
   elements.appShell.hidden = true;
+  elements.workspaceToggleButton.hidden = true;
   elements.newIdeaButton.hidden = true;
   elements.newSpeechButton.hidden = true;
+  elements.newPlaybookButton.hidden = true;
   elements.logoutButton.hidden = !state.user;
   closeEditor();
   closeRehearsal();
@@ -172,8 +186,7 @@ function showLogin() {
 function showApp() {
   elements.loginPanel.hidden = true;
   elements.appShell.hidden = false;
-  elements.newIdeaButton.hidden = false;
-  elements.newSpeechButton.hidden = false;
+  elements.workspaceToggleButton.hidden = false;
   elements.logoutButton.hidden = false;
 }
 
@@ -190,9 +203,12 @@ function clearAuthHash() {
 
 function resetSpeechState() {
   state.speeches = [];
+  state.playbookEntries = [];
+  state.workspaceView = "speeches";
   state.selectedSpeechId = null;
   state.selectedVersionId = null;
   state.selectedDeliveryId = null;
+  state.selectedPlaybookId = null;
   state.versionCompareOpen = false;
   state.rehearsal.speechId = null;
   state.rehearsal.versionId = null;
@@ -505,12 +521,34 @@ function mapSpeechData(speechRows, versionRows, runRows) {
   });
 }
 
+function mapPlaybookData(playbookRows) {
+  return (playbookRows || [])
+    .map((row) => ({
+      id: row.id,
+      title: row.title || "Untitled Principle",
+      category: row.category || "",
+      principle: row.principle || "",
+      whyItWorks: row.why_it_works || "",
+      tags: ensureTextArray(row.tags),
+      pinned: Boolean(row.pinned),
+      createdAt: row.created_at || "",
+      updatedAt: row.updated_at || row.created_at || "",
+    }))
+    .sort((a, b) => {
+      if (a.pinned !== b.pinned) {
+        return a.pinned ? -1 : 1;
+      }
+
+      return timestampMs(b.updatedAt || b.createdAt) - timestampMs(a.updatedAt || a.createdAt);
+    });
+}
+
 async function loadSpeeches(options = {}) {
   if (!options.silent) {
     setPageStatus("Loading speeches.");
   }
 
-  const [speechResult, versionResult, runResult] = await Promise.all([
+  const [speechResult, versionResult, runResult, playbookResult] = await Promise.all([
     db
       .from("brajesh_speeches")
       .select("id, title, status, goal, core_idea, tags, notes, active_version_id, created_at, updated_at")
@@ -524,13 +562,20 @@ async function loadSpeeches(options = {}) {
       .select("id, speech_id, version_id, delivered_at, location, city, program, event_level, speech_style, audience, result, actual_minutes, what_worked, what_missed, learnings, evaluator_notes, next_actions, created_at, updated_at")
       .order("delivered_at", { ascending: false })
       .order("created_at", { ascending: false }),
+    db
+      .from("brajesh_speech_playbook")
+      .select("id, title, category, principle, why_it_works, tags, pinned, created_at, updated_at")
+      .order("pinned", { ascending: false })
+      .order("updated_at", { ascending: false }),
   ]);
 
   if (speechResult.error) throw speechResult.error;
   if (versionResult.error) throw versionResult.error;
   if (runResult.error) throw runResult.error;
+  if (playbookResult.error) throw playbookResult.error;
 
   state.speeches = mapSpeechData(speechResult.data, versionResult.data, runResult.data);
+  state.playbookEntries = mapPlaybookData(playbookResult.data);
   showApp();
   renderApp();
 
@@ -813,12 +858,20 @@ function getSpeechById(id) {
   return state.speeches.find((speech) => speech.id === id) || null;
 }
 
+function getPlaybookById(id) {
+  return state.playbookEntries.find((entry) => entry.id === id) || null;
+}
+
 function getVersionById(speech, versionId) {
   return speech?.versions.find((version) => version.id === versionId) || null;
 }
 
 function getDeliveryById(speech, deliveryId) {
   return speech?.deliveries.find((delivery) => delivery.id === deliveryId) || null;
+}
+
+function getPinnedPlaybookEntries() {
+  return state.playbookEntries.filter((entry) => entry.pinned);
 }
 
 function sortDeliveries(deliveries) {
@@ -855,6 +908,30 @@ function getFilteredSpeeches() {
   });
 }
 
+function getFilteredPlaybookEntries() {
+  const query = state.playbookSearch.trim().toLowerCase();
+
+  return state.playbookEntries.filter((entry) => {
+    if (state.playbookFilter === "pinned" && !entry.pinned) {
+      return false;
+    }
+
+    if (!query) {
+      return true;
+    }
+
+    const haystack = [
+      entry.title,
+      entry.category,
+      entry.principle,
+      entry.whyItWorks,
+      entry.tags.join(" "),
+    ].join(" ").toLowerCase();
+
+    return haystack.includes(query);
+  });
+}
+
 function ensureSelection() {
   const filtered = getFilteredSpeeches();
 
@@ -878,6 +955,23 @@ function ensureSelection() {
   state.selectedDeliveryId = delivery?.id || null;
 
   return speech;
+}
+
+function ensurePlaybookSelection() {
+  const filtered = getFilteredPlaybookEntries();
+
+  if (!filtered.length) {
+    state.selectedPlaybookId = null;
+    return null;
+  }
+
+  let entry = getPlaybookById(state.selectedPlaybookId);
+  if (!entry || !filtered.some((item) => item.id === entry.id)) {
+    entry = filtered[0];
+    state.selectedPlaybookId = entry.id;
+  }
+
+  return entry;
 }
 
 function getSelectedVersionForSpeech(speech) {
@@ -950,7 +1044,55 @@ function setLibraryStatus(text, tone = "") {
   elements.libraryStatus.dataset.tone = tone;
 }
 
+function renderTopActions() {
+  const showPlaybook = state.workspaceView === "playbook";
+  elements.workspaceToggleButton.hidden = !state.user;
+  elements.workspaceToggleButton.textContent = showPlaybook ? "Speech Library" : "Playbook";
+  elements.workspaceToggleButton.setAttribute("aria-pressed", String(showPlaybook));
+  elements.newIdeaButton.hidden = showPlaybook || !state.user;
+  elements.newSpeechButton.hidden = showPlaybook || !state.user;
+  elements.newPlaybookButton.hidden = !showPlaybook || !state.user;
+}
+
+function renderWorkspaceRail() {
+  if (state.workspaceView === "playbook") {
+    elements.libraryEyebrow.textContent = "Playbook";
+    elements.libraryTitle.textContent = "Principles";
+    if (elements.searchInput.value !== state.playbookSearch) {
+      elements.searchInput.value = state.playbookSearch;
+    }
+    elements.searchInput.placeholder = "Search principles";
+    return;
+  }
+
+  elements.libraryEyebrow.textContent = "Library";
+  elements.libraryTitle.textContent = "Speeches";
+  if (elements.searchInput.value !== state.search) {
+    elements.searchInput.value = state.search;
+  }
+  elements.searchInput.placeholder = "Search speeches";
+}
+
+function playbookCategoryCount() {
+  return new Set(
+    state.playbookEntries
+      .map((entry) => entry.category.trim())
+      .filter(Boolean),
+  ).size;
+}
+
 function renderCounts() {
+  if (state.workspaceView === "playbook") {
+    const total = state.playbookEntries.length;
+    const pinned = state.playbookEntries.filter((entry) => entry.pinned).length;
+    const categories = playbookCategoryCount();
+
+    elements.totalCount.textContent = `${total} ${total === 1 ? "principle" : "principles"}`;
+    elements.draftCount.textContent = `${pinned} pinned`;
+    elements.deliveredCount.textContent = `${categories} ${categories === 1 ? "category" : "categories"}`;
+    return;
+  }
+
   const total = state.speeches.length;
   const inProgress = state.speeches.filter((speech) => ["idea", "draft", "rehearsal_ready"].includes(speech.status)).length;
   const delivered = state.speeches.filter((speech) => speech.deliveries.length > 0).length;
@@ -961,6 +1103,25 @@ function renderCounts() {
 }
 
 function renderFilters() {
+  if (state.workspaceView === "playbook") {
+    const filters = [
+      { id: "all", label: "All" },
+      { id: "pinned", label: "Pinned" },
+    ];
+
+    elements.filterBar.innerHTML = filters.map((filter) => `
+      <button
+        class="filter-pill"
+        type="button"
+        data-filter="${filter.id}"
+        aria-pressed="${String(state.playbookFilter === filter.id)}"
+      >
+        ${filter.label}
+      </button>
+    `).join("");
+    return;
+  }
+
   const filters = [
     { id: "all", label: "All" },
     { id: "idea", label: "Ideas" },
@@ -979,6 +1140,178 @@ function renderFilters() {
       ${filter.label}
     </button>
   `).join("");
+}
+
+function renderPlaybookBody(entry) {
+  if (!entry) {
+    return `
+      <div class="empty-state">
+        Capture the speaking moves, emotional arcs, and structural lessons you want to keep using.
+      </div>
+    `;
+  }
+
+  const updatedLabel = entry.updatedAt ? `Last edited ${formatDateTime(entry.updatedAt)}` : "Not edited yet";
+
+  return `
+    <div class="reader-stack">
+      <div class="card">
+        <div class="panel-head">
+          <h4>Guiding Principle</h4>
+          <div class="button-row">
+            <span class="meta-chip">${displayText(entry.category || "Uncategorized")}</span>
+            <span class="meta-chip">${entry.pinned ? "Pinned in writing" : "Playbook only"}</span>
+          </div>
+        </div>
+        <p class="playbook-principle">${displayText(entry.principle, "No principle saved yet.")}</p>
+      </div>
+
+      <div class="two-up">
+        <div class="card">
+          <div class="panel-head">
+            <h4>Why It Works</h4>
+            <span class="meta-chip">${updatedLabel}</span>
+          </div>
+          <div class="notes-box">
+            <p class="body-copy">${displayText(entry.whyItWorks, "Add the reason behind this principle so future drafts use it deliberately, not mechanically.")}</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="panel-head">
+            <h4>Use In Writing</h4>
+            <span class="meta-chip">${entry.tags.length} ${entry.tags.length === 1 ? "tag" : "tags"}</span>
+          </div>
+          <div class="playbook-meta-stack">
+            <div class="info-grid">
+              <div class="info-row">
+                <strong>Pinned in Editors</strong>
+                <span>${entry.pinned ? "Yes. This appears at the top of script-writing editors." : "No. Keep it in Playbook until it becomes a recurring rule."}</span>
+              </div>
+              <div class="info-row">
+                <strong>Created</strong>
+                <span>${displayText(formatDateTime(entry.createdAt || entry.updatedAt || ""))}</span>
+              </div>
+              <div class="info-row">
+                <strong>Category</strong>
+                <span>${displayText(entry.category || "Uncategorized")}</span>
+              </div>
+            </div>
+            <div class="tag-row">
+              ${renderTagChips(entry.tags)}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderPlaybookDetail(entry) {
+  elements.tabBar.hidden = true;
+
+  if (!entry) {
+    elements.speechMode.textContent = "Playbook";
+    elements.speechTitle.textContent = state.playbookEntries.length ? "No matching principle" : "Build your speaking playbook";
+    elements.speechStatusChip.textContent = "Playbook";
+    elements.speechStatusChip.dataset.status = "playbook";
+    elements.speechGoalChip.textContent = "Global guidance";
+    elements.speechCountChip.textContent = `${state.playbookEntries.length} ${state.playbookEntries.length === 1 ? "principle" : "principles"}`;
+    elements.speechIdea.textContent = state.playbookEntries.length
+      ? "Adjust the search or filter to see a principle."
+      : "Capture the lessons you want every future speech to remember.";
+    elements.speechTags.innerHTML = "";
+    elements.detailActionRow.innerHTML = `
+      <button class="primary-button" type="button" data-action="new-playbook">New Principle</button>
+      <button class="ghost-button" type="button" data-action="toggle-workspace-view">Speech Library</button>
+    `;
+    elements.focusCard.innerHTML = `
+      <div class="focus-block" data-size="wide">
+        <strong>What Belongs Here</strong>
+        <p>Store reusable speaking principles, emotional arcs, structural patterns, and stagecraft lessons that should outlive any single speech.</p>
+      </div>
+      <div class="focus-block">
+        <strong>Pinned Guidance</strong>
+        <p>${getPinnedPlaybookEntries().length} pinned</p>
+        <span class="helper-copy">Pinned principles show up inside script-writing editors.</span>
+      </div>
+    `;
+    elements.tabContent.innerHTML = `
+      <div class="empty-state">
+        ${state.playbookEntries.length ? "No principles match the current search." : "No playbook principles yet. Start with one lesson you never want to forget."}
+      </div>
+    `;
+    syncHeaderActions();
+    return;
+  }
+
+  elements.speechMode.textContent = entry.pinned ? "Pinned Playbook Principle" : "Playbook Principle";
+  elements.speechTitle.textContent = entry.title;
+  elements.speechStatusChip.textContent = entry.pinned ? "Pinned" : "Playbook";
+  elements.speechStatusChip.dataset.status = entry.pinned ? "pinned" : "playbook";
+  elements.speechGoalChip.textContent = entry.category || "Uncategorized";
+  elements.speechCountChip.textContent = `${entry.tags.length} ${entry.tags.length === 1 ? "tag" : "tags"}`;
+  elements.speechIdea.textContent = entry.principle || "No principle saved yet.";
+  elements.speechTags.innerHTML = renderTagChips(entry.tags);
+  elements.detailActionRow.innerHTML = `
+    <button class="meta-button" type="button" data-action="edit-playbook">Edit Principle</button>
+    <button class="primary-button" type="button" data-action="new-playbook">New Principle</button>
+    <button class="danger-button" type="button" data-action="delete-playbook">Delete Principle</button>
+  `;
+  elements.focusCard.innerHTML = `
+    <div class="focus-block" data-size="wide">
+      <strong>Why It Works</strong>
+      <p>${displayText(entry.whyItWorks, "Add why this principle works so the rule stays memorable and intentional.")}</p>
+      <span class="helper-copy">${displayText(entry.updatedAt ? `Last edited ${formatDateTime(entry.updatedAt)}` : "Not edited yet.")}</span>
+    </div>
+    <div class="focus-block">
+      <strong>Writing Use</strong>
+      <p>${entry.pinned ? "Pinned in editors" : "Playbook only"}</p>
+      <span class="helper-copy">${entry.pinned ? "This shows up while drafting." : "Pin it when it becomes a recurring rule."}</span>
+    </div>
+  `;
+  elements.tabContent.innerHTML = renderPlaybookBody(entry);
+  syncHeaderActions();
+}
+
+function renderPlaybookList() {
+  const filtered = getFilteredPlaybookEntries();
+  const selected = ensurePlaybookSelection();
+
+  if (!filtered.length) {
+    elements.speechList.innerHTML = `<div class="empty-state">${state.playbookEntries.length ? "No principles match this filter." : "No playbook principles yet."}</div>`;
+    setLibraryStatus(
+      state.playbookEntries.length
+        ? (state.playbookSearch ? `Filtering principles by "${state.playbookSearch.trim()}".` : "No principles match this filter.")
+        : "Start your playbook with a lesson you want to reuse.",
+      state.playbookEntries.length ? "" : "ok",
+    );
+    renderPlaybookDetail(null);
+    return;
+  }
+
+  elements.speechList.innerHTML = filtered.map((entry) => `
+    <button class="speech-card" type="button" data-playbook-id="${entry.id}" aria-pressed="${String(selected?.id === entry.id)}">
+      <div class="meta-row">
+        <span class="status-chip" data-status="${entry.pinned ? "pinned" : "playbook"}">${entry.pinned ? "Pinned" : "Playbook"}</span>
+        <span class="meta-chip">${displayText(entry.category || "Uncategorized")}</span>
+      </div>
+      <h3>${displayText(entry.title)}</h3>
+      <p>${displayText(excerpt(entry.principle, 140), "No principle saved yet.")}</p>
+      <div class="tag-row">
+        ${renderTagChips(entry.tags.slice(0, 3))}
+      </div>
+      <p>${displayText(entry.updatedAt ? `Last edited ${formatDateTime(entry.updatedAt)}` : "Not edited yet.")}</p>
+    </button>
+  `).join("");
+
+  setLibraryStatus(
+    state.playbookSearch
+      ? `Filtering principles by "${state.playbookSearch.trim()}".`
+      : "Showing your reusable speaking principles.",
+    "ok",
+  );
+  renderPlaybookDetail(selected);
 }
 
 function renderSpeechList() {
@@ -1019,6 +1352,8 @@ function renderSpeechList() {
 }
 
 function renderSpeechDetail(speech) {
+  elements.tabBar.hidden = false;
+
   if (!speech) {
     elements.speechMode.textContent = "Speech";
     elements.speechTitle.textContent = "Select a speech";
@@ -1080,7 +1415,9 @@ function renderDetailActions(speech) {
   `;
 }
 
-function syncHeaderActions() {}
+function syncHeaderActions() {
+  renderTopActions();
+}
 
 function renderFocusCard(speech, version) {
   const delivery = getSelectedDeliveryForSpeech(speech);
@@ -1620,6 +1957,7 @@ function openSpeechEditor({ speechId = null, statusPreset = "draft" } = {}) {
     speechId,
     versionId: null,
     deliveryId: null,
+    playbookId: null,
     statusPreset,
     sourceVersionId: null,
   };
@@ -1642,6 +1980,7 @@ function openVersionEditor({ speechId = null, versionId = null } = {}) {
     speechId: speech.id,
     versionId: versionId || null,
     deliveryId: null,
+    playbookId: null,
     statusPreset: speech.status,
     sourceVersionId: selectedVersion?.id || null,
   };
@@ -1664,9 +2003,32 @@ function openDeliveryEditor({ speechId = null, deliveryId = null } = {}) {
     speechId: speech.id,
     versionId: selectedDelivery?.versionId || getSelectedVersionForSpeech(speech)?.id || null,
     deliveryId: deliveryId || null,
+    playbookId: null,
     statusPreset: speech.status,
     sourceVersionId: null,
   };
+
+  renderEditor();
+}
+
+function openPlaybookEditor({ playbookId = null } = {}) {
+  const entry = playbookId ? getPlaybookById(playbookId) : ensurePlaybookSelection();
+
+  state.editor = {
+    open: true,
+    kind: "playbook",
+    intent: playbookId ? "edit" : "create",
+    speechId: null,
+    versionId: null,
+    deliveryId: null,
+    playbookId: playbookId || null,
+    statusPreset: "draft",
+    sourceVersionId: null,
+  };
+
+  if (!playbookId && entry?.id) {
+    state.selectedPlaybookId = entry.id;
+  }
 
   renderEditor();
 }
@@ -1680,6 +2042,7 @@ function closeEditor() {
     speechId: null,
     versionId: null,
     deliveryId: null,
+    playbookId: null,
     statusPreset: "draft",
     sourceVersionId: null,
   };
@@ -1720,6 +2083,39 @@ function renderScriptTextSizeControl(label = "Script Text") {
       >
       <span class="meta-chip text-size-value" data-script-text-size-value>${state.preferences.scriptTextSize}px</span>
     </label>
+  `;
+}
+
+function renderPinnedPlaybookGuidance() {
+  const pinnedEntries = getPinnedPlaybookEntries();
+
+  if (!pinnedEntries.length) {
+    return "";
+  }
+
+  return `
+    <div class="editor-card">
+      <div class="editor-card-head">
+        <div>
+          <h3>Playbook</h3>
+          <p class="editor-card-copy">Pinned principles stay visible while you draft so the speech follows your best recurring lessons.</p>
+        </div>
+        <span class="meta-chip">${pinnedEntries.length} ${pinnedEntries.length === 1 ? "pinned principle" : "pinned principles"}</span>
+      </div>
+      <div class="playbook-guidance-grid">
+        ${pinnedEntries.map((entry) => `
+          <div class="playbook-guidance-card">
+            <div class="meta-row">
+              <span class="status-chip" data-status="pinned">Pinned</span>
+              <span class="meta-chip">${displayText(entry.category || "Uncategorized")}</span>
+            </div>
+            <strong>${displayText(entry.title)}</strong>
+            <p class="playbook-guidance-principle">${displayText(entry.principle)}</p>
+            <p class="helper-copy">${displayText(excerpt(entry.whyItWorks || "Use this as a writing constraint while shaping the arc, tone, and emotional movement.", 150))}</p>
+          </div>
+        `).join("")}
+      </div>
+    </div>
   `;
 }
 
@@ -1898,6 +2294,8 @@ function speechEditorConfig(speech) {
             </div>
           </div>
 
+          ${renderPinnedPlaybookGuidance()}
+
           ${renderScriptComposer({
             heading: "Speech Body",
             copy: "Give the draft the full width. Rehearsal bullets stay below in a collapsible panel.",
@@ -1975,6 +2373,8 @@ function versionEditorConfig(speech, version) {
             </div>
           </div>
         </div>
+
+        ${renderPinnedPlaybookGuidance()}
 
         ${renderScriptComposer({
           heading: "Speech Body",
@@ -2084,12 +2484,84 @@ function deliveryEditorConfig(speech, delivery) {
   };
 }
 
+function yesNoOptions(selectedValue) {
+  return renderOptions([
+    { value: "true", label: "Pinned in writing" },
+    { value: "false", label: "Playbook only" },
+  ], selectedValue);
+}
+
+function playbookEditorConfig(entry) {
+  const isEdit = state.editor.intent === "edit";
+
+  return {
+    layout: "drawer",
+    modeLabel: isEdit ? "Edit Principle" : "New Principle",
+    title: isEdit ? entry.title : "New Playbook Principle",
+    context: isEdit
+      ? `${entry.category || "Uncategorized"} · Last edited ${formatDateTime(entry.updatedAt)}`
+      : "Capture a reusable speaking principle so it can guide future drafts.",
+    footer: "Pinned principles show up in the script-writing editors as live drafting guidance.",
+    dismissLabel: "Back to Workspace",
+    saveLabel: isEdit ? "Save Principle" : "Create Principle",
+    fields: `
+      <div class="editor-card">
+        <div class="editor-card-head">
+          <div>
+            <h3>Principle Settings</h3>
+            <p class="editor-card-copy">Name the lesson, categorize it, and decide whether it should stay visible while you write.</p>
+          </div>
+          ${isEdit ? `<span class="meta-chip">${entry.pinned ? "Pinned in writing" : "Playbook only"}</span>` : ""}
+        </div>
+        <div class="editor-grid">
+          <div class="field">
+            <label for="playbookTitleInput">Title</label>
+            <input id="playbookTitleInput" name="title" type="text" value="${escapeHtml(entry?.title || "")}" required>
+          </div>
+          <div class="field">
+            <label for="playbookCategoryInput">Category</label>
+            <input id="playbookCategoryInput" name="category" type="text" value="${escapeHtml(entry?.category || "")}">
+          </div>
+          <div class="field" data-span="full">
+            <label for="playbookTagsInput">Tags</label>
+            <input id="playbookTagsInput" name="tags" type="text" value="${escapeHtml((entry?.tags || []).join(", "))}">
+          </div>
+          <div class="field" data-span="full">
+            <label for="playbookPinnedSelect">Visibility While Writing</label>
+            <select id="playbookPinnedSelect" name="pinned">
+              ${yesNoOptions(entry?.pinned ? "true" : "false")}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="editor-card">
+        <div class="editor-card-head">
+          <div>
+            <h3>Reusable Lesson</h3>
+            <p class="editor-card-copy">Write the principle exactly as you want to see it during drafting.</p>
+          </div>
+        </div>
+        <div class="field">
+          <label for="playbookPrincipleInput">Principle</label>
+          <textarea id="playbookPrincipleInput" name="principle" data-compact="true">${escapeHtml(entry?.principle || "")}</textarea>
+        </div>
+        <div class="field">
+          <label for="playbookWhyInput">Why It Works</label>
+          <textarea id="playbookWhyInput" name="whyItWorks" data-compact="true">${escapeHtml(entry?.whyItWorks || "")}</textarea>
+        </div>
+      </div>
+    `,
+  };
+}
+
 function renderEditor() {
   const speech = getSpeechById(state.editor.speechId);
   const version = speech
     ? getVersionById(speech, state.editor.versionId || state.editor.sourceVersionId)
     : null;
   const delivery = speech ? getDeliveryById(speech, state.editor.deliveryId) : null;
+  const playbookEntry = getPlaybookById(state.editor.playbookId);
 
   let config = null;
 
@@ -2099,6 +2571,8 @@ function renderEditor() {
     config = versionEditorConfig(speech, version);
   } else if (state.editor.kind === "delivery" && speech && (state.editor.intent === "create" || delivery)) {
     config = deliveryEditorConfig(speech, delivery);
+  } else if (state.editor.kind === "playbook" && (state.editor.intent === "create" || playbookEntry)) {
+    config = playbookEditorConfig(playbookEntry);
   }
 
   if (!config) {
@@ -2124,8 +2598,11 @@ function renderEditor() {
   scheduleAutoSizeRichTextareas(elements.editorShell);
 
   const showSpeechDelete = state.editor.kind === "speech" && state.editor.intent === "edit" && Boolean(speech);
-  elements.deleteEditorButton.hidden = !showSpeechDelete;
-  elements.deleteEditorButton.textContent = speech?.status === "idea" ? "Delete Idea" : "Delete Speech";
+  const showPlaybookDelete = state.editor.kind === "playbook" && state.editor.intent === "edit" && Boolean(playbookEntry);
+  elements.deleteEditorButton.hidden = !(showSpeechDelete || showPlaybookDelete);
+  elements.deleteEditorButton.textContent = showPlaybookDelete
+    ? "Delete Principle"
+    : (speech?.status === "idea" ? "Delete Idea" : "Delete Speech");
 
   requestAnimationFrame(() => {
     elements.editorFields.querySelector("input, textarea, select")?.focus();
@@ -2367,6 +2844,65 @@ async function saveDelivery(formData) {
   }
 }
 
+async function savePlaybookEntry(formData) {
+  const isEdit = state.editor.intent === "edit";
+  const title = cleanText(formData.get("title"));
+  const principle = multilineText(formData.get("principle"));
+
+  if (!title) {
+    setEditorStatus("Title is required.", "error");
+    return;
+  }
+
+  if (!principle) {
+    setEditorStatus("Principle text is required.", "error");
+    return;
+  }
+
+  const payload = {
+    title,
+    category: cleanText(formData.get("category")),
+    tags: parseTagList(formData.get("tags")),
+    pinned: cleanText(formData.get("pinned")) === "true",
+    principle,
+    why_it_works: multilineText(formData.get("whyItWorks")),
+  };
+
+  try {
+    let savedEntryId = state.editor.playbookId;
+
+    if (isEdit) {
+      const entry = getPlaybookById(state.editor.playbookId);
+      if (!entry) return;
+
+      const { error } = await db
+        .from("brajesh_speech_playbook")
+        .update(payload)
+        .eq("id", entry.id);
+
+      if (error) throw error;
+      savedEntryId = entry.id;
+    } else {
+      const { data, error } = await db
+        .from("brajesh_speech_playbook")
+        .insert(payload)
+        .select("id")
+        .single();
+
+      if (error) throw error;
+      savedEntryId = data.id;
+    }
+
+    state.selectedPlaybookId = savedEntryId;
+    state.workspaceView = "playbook";
+    closeEditor();
+    await loadSpeeches({ silent: true });
+    setPageStatus(isEdit ? "Playbook principle saved." : "Playbook principle created.", "ok");
+  } catch (error) {
+    reportEditorError(error.message || "Could not save that playbook principle.");
+  }
+}
+
 async function saveEditor(event) {
   event.preventDefault();
   if (editorBusy) {
@@ -2378,6 +2914,8 @@ async function saveEditor(event) {
     ? (state.editor.intent === "edit" ? "Saving Run..." : "Logging Run...")
     : state.editor.kind === "version"
       ? (state.editor.intent === "edit" ? "Saving Script..." : "Creating Version...")
+      : state.editor.kind === "playbook"
+        ? (state.editor.intent === "edit" ? "Saving Principle..." : "Creating Principle...")
       : (state.editor.intent === "edit" ? "Saving Speech..." : "Creating Speech...");
 
   setEditorBusy(true, busyLabel);
@@ -2396,6 +2934,11 @@ async function saveEditor(event) {
 
     if (state.editor.kind === "delivery") {
       await saveDelivery(formData);
+      return;
+    }
+
+    if (state.editor.kind === "playbook") {
+      await savePlaybookEntry(formData);
     }
   } finally {
     if (!elements.editorShell.hidden) {
@@ -2447,6 +2990,49 @@ async function deleteSpeech() {
     setPageStatus(error.message || `Could not delete "${speech.title}".`, "error");
   } finally {
     speechDeleteBusy = false;
+  }
+}
+
+async function deletePlaybookEntry(playbookId = state.editor.playbookId || state.selectedPlaybookId) {
+  const entry = getPlaybookById(playbookId);
+  if (!entry || playbookDeleteBusy) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Delete "${entry.title}"?\n\nThis permanently removes the playbook principle from the workspace and from pinned writing guidance.`,
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  playbookDeleteBusy = true;
+  setPageStatus(`Deleting "${entry.title}"...`);
+
+  try {
+    const { error } = await db
+      .from("brajesh_speech_playbook")
+      .delete()
+      .eq("id", entry.id);
+
+    if (error) throw error;
+
+    if (state.editor.playbookId === entry.id) {
+      closeEditor();
+    }
+
+    if (state.selectedPlaybookId === entry.id) {
+      state.selectedPlaybookId = null;
+    }
+
+    state.workspaceView = "playbook";
+    await loadSpeeches({ silent: true });
+    setPageStatus(`Deleted "${entry.title}".`, "ok");
+  } catch (error) {
+    setPageStatus(error.message || `Could not delete "${entry.title}".`, "error");
+  } finally {
+    playbookDeleteBusy = false;
   }
 }
 
@@ -2591,6 +3177,7 @@ function renderRehearsalScreen() {
 
 function runAction(action) {
   const speech = ensureSelection();
+  const playbookEntry = ensurePlaybookSelection();
 
   if (action === "new-idea") {
     openSpeechEditor({ statusPreset: "idea" });
@@ -2617,6 +3204,30 @@ function runAction(action) {
 
   if (action === "new-version" && speech) {
     openVersionEditor({ speechId: speech.id });
+    return;
+  }
+
+  if (action === "toggle-workspace-view") {
+    state.workspaceView = state.workspaceView === "playbook" ? "speeches" : "playbook";
+    renderApp();
+    return;
+  }
+
+  if (action === "new-playbook") {
+    state.workspaceView = "playbook";
+    openPlaybookEditor();
+    return;
+  }
+
+  if (action === "edit-playbook" && playbookEntry) {
+    state.workspaceView = "playbook";
+    openPlaybookEditor({ playbookId: playbookEntry.id });
+    return;
+  }
+
+  if (action === "delete-playbook" && playbookEntry) {
+    state.workspaceView = "playbook";
+    deletePlaybookEntry(playbookEntry.id);
     return;
   }
 
@@ -2692,9 +3303,15 @@ function handleFullscreenBodyClick(event) {
 }
 
 function renderApp() {
+  renderTopActions();
+  renderWorkspaceRail();
   renderCounts();
   renderFilters();
-  renderSpeechList();
+  if (state.workspaceView === "playbook") {
+    renderPlaybookList();
+  } else {
+    renderSpeechList();
+  }
   syncScriptTextSizeControls(elements.tabContent);
 }
 
@@ -2722,8 +3339,16 @@ elements.logoutButton.addEventListener("click", () => {
   handleSignOut();
 });
 
+elements.workspaceToggleButton.addEventListener("click", () => {
+  runAction("toggle-workspace-view");
+});
+
 elements.searchInput.addEventListener("input", () => {
-  state.search = elements.searchInput.value;
+  if (state.workspaceView === "playbook") {
+    state.playbookSearch = elements.searchInput.value;
+  } else {
+    state.search = elements.searchInput.value;
+  }
   renderApp();
 });
 
@@ -2731,7 +3356,11 @@ elements.filterBar.addEventListener("click", (event) => {
   const button = event.target.closest("[data-filter]");
   if (!button) return;
 
-  state.filter = button.dataset.filter;
+  if (state.workspaceView === "playbook") {
+    state.playbookFilter = button.dataset.filter;
+  } else {
+    state.filter = button.dataset.filter;
+  }
   renderApp();
 });
 
@@ -2743,7 +3372,20 @@ elements.newSpeechButton.addEventListener("click", () => {
   runAction("new-speech");
 });
 
+elements.newPlaybookButton.addEventListener("click", () => {
+  runAction("new-playbook");
+});
+
 elements.speechList.addEventListener("click", (event) => {
+  if (state.workspaceView === "playbook") {
+    const button = event.target.closest("[data-playbook-id]");
+    if (!button) return;
+
+    state.selectedPlaybookId = button.dataset.playbookId;
+    renderApp();
+    return;
+  }
+
   const button = event.target.closest("[data-speech-id]");
   if (!button) return;
 
@@ -2824,6 +3466,11 @@ elements.cancelEditorButton.addEventListener("click", () => {
 
 elements.deleteEditorButton.addEventListener("click", () => {
   if (editorBusy) return;
+  if (state.editor.kind === "playbook") {
+    deletePlaybookEntry(state.editor.playbookId);
+    return;
+  }
+
   deleteSpeech();
 });
 

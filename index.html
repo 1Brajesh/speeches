@@ -433,6 +433,18 @@
       background: rgba(167, 144, 255, 0.08);
     }
 
+    .status-chip[data-status="playbook"] {
+      color: var(--gold);
+      border-color: rgba(242, 200, 118, 0.26);
+      background: rgba(242, 200, 118, 0.08);
+    }
+
+    .status-chip[data-status="pinned"] {
+      color: var(--green);
+      border-color: rgba(138, 208, 166, 0.28);
+      background: rgba(138, 208, 166, 0.1);
+    }
+
     .speech-list {
       display: grid;
       gap: 12px;
@@ -788,6 +800,46 @@
     .compare-empty {
       color: var(--faint);
       font-style: italic;
+    }
+
+    .playbook-principle,
+    .playbook-guidance-principle {
+      margin: 0;
+      white-space: pre-wrap;
+      color: var(--text);
+    }
+
+    .playbook-principle {
+      font-family: var(--serif);
+      font-size: clamp(1.5rem, 2vw, 2rem);
+      line-height: 1.38;
+      letter-spacing: -0.02em;
+    }
+
+    .playbook-guidance-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+    }
+
+    .playbook-guidance-card {
+      padding: 14px 16px;
+      border-radius: 20px;
+      border: 1px solid var(--line);
+      background:
+        linear-gradient(180deg, rgba(138, 208, 166, 0.08), rgba(138, 208, 166, 0.03)),
+        rgba(255, 255, 255, 0.02);
+      display: grid;
+      gap: 10px;
+    }
+
+    .playbook-guidance-principle {
+      line-height: 1.55;
+    }
+
+    .playbook-meta-stack {
+      display: grid;
+      gap: 12px;
     }
 
     .bullet-card {
@@ -1400,8 +1452,10 @@
       </div>
       <div class="top-actions">
         <span class="identity-text" id="adminIdentity"></span>
+        <button class="ghost-button" type="button" id="workspaceToggleButton" hidden>Playbook</button>
         <button class="ghost-button" type="button" id="newIdeaButton" hidden>New Idea</button>
         <button class="primary-button" type="button" id="newSpeechButton" hidden>New Speech</button>
+        <button class="primary-button" type="button" id="newPlaybookButton" hidden>New Principle</button>
         <button class="ghost-button" type="button" id="logoutButton" hidden>Sign Out</button>
       </div>
     </header>
@@ -1429,8 +1483,8 @@
     <section class="workspace" id="appShell" hidden>
       <aside class="panel">
         <div class="panel-body">
-          <span class="eyebrow">Library</span>
-          <h2 class="section-title">Speeches</h2>
+          <span class="eyebrow" id="libraryEyebrow">Library</span>
+          <h2 class="section-title" id="libraryTitle">Speeches</h2>
 
           <input class="search-input" id="searchInput" type="search" placeholder="Search speeches">
 
@@ -1544,6 +1598,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260510d"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260510e"></script>
 </body>
 </html>
