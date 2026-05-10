@@ -24,6 +24,7 @@
       --shadow: 0 26px 72px rgba(0, 0, 0, 0.32);
       --radius: 26px;
       --script-text-size: 20px;
+      --script-line-height: 1.76;
       --serif: "Iowan Old Style", "Baskerville", Georgia, serif;
       --sans: "Avenir Next", "Segoe UI", Helvetica, Arial, sans-serif;
     }
@@ -717,7 +718,7 @@
 
     .script-box .body-copy {
       white-space: pre-wrap;
-      line-height: 1.76;
+      line-height: var(--script-line-height);
       font-family: var(--serif);
       font-size: var(--script-text-size);
     }
@@ -770,7 +771,7 @@
     .compare-empty {
       margin: 0;
       white-space: pre-wrap;
-      line-height: 1.76;
+      line-height: var(--script-line-height);
       font-family: var(--serif);
       font-size: var(--script-text-size);
     }
@@ -986,6 +987,14 @@
       min-width: 48px;
       justify-content: center;
       white-space: nowrap;
+    }
+
+    .reading-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: flex-end;
     }
 
     .info-grid {
@@ -1247,7 +1256,7 @@
       min-height: 160px;
       font-family: var(--serif);
       font-size: var(--script-text-size);
-      line-height: 1.78;
+      line-height: var(--script-line-height);
       resize: none;
       overflow: hidden;
     }
@@ -1598,6 +1607,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260510e"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260510f"></script>
 </body>
 </html>

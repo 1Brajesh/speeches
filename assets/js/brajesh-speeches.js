@@ -7,9 +7,14 @@ import {
 
 const db = createBrajeshClient();
 const SCRIPT_TEXT_SIZE_STORAGE_KEY = "brajesh_speeches_script_text_size";
+const SCRIPT_LINE_HEIGHT_STORAGE_KEY = "brajesh_speeches_script_line_height";
 const SCRIPT_TEXT_SIZE_MIN = 16;
 const SCRIPT_TEXT_SIZE_MAX = 28;
 const SCRIPT_TEXT_SIZE_DEFAULT = 20;
+const SCRIPT_LINE_HEIGHT_MIN = 1.2;
+const SCRIPT_LINE_HEIGHT_MAX = 2.2;
+const SCRIPT_LINE_HEIGHT_STEP = 0.02;
+const SCRIPT_LINE_HEIGHT_DEFAULT = 1.76;
 
 const state = {
   user: null,
@@ -33,6 +38,7 @@ const state = {
   },
   preferences: {
     scriptTextSize: loadScriptTextSizePreference(),
+    scriptLineHeight: loadScriptLineHeightPreference(),
   },
   panels: {
     "version-history": false,
@@ -306,14 +312,43 @@ function loadScriptTextSizePreference() {
   }
 }
 
+function clampScriptLineHeight(value) {
+  const parsed = Number.parseFloat(String(value || ""));
+
+  if (Number.isNaN(parsed)) {
+    return SCRIPT_LINE_HEIGHT_DEFAULT;
+  }
+
+  const clamped = Math.min(SCRIPT_LINE_HEIGHT_MAX, Math.max(SCRIPT_LINE_HEIGHT_MIN, parsed));
+  return Math.round(clamped * 100) / 100;
+}
+
+function loadScriptLineHeightPreference() {
+  try {
+    return clampScriptLineHeight(window.localStorage?.getItem(SCRIPT_LINE_HEIGHT_STORAGE_KEY));
+  } catch {
+    return SCRIPT_LINE_HEIGHT_DEFAULT;
+  }
+}
+
 function persistScriptTextSizePreference(value) {
   try {
     window.localStorage?.setItem(SCRIPT_TEXT_SIZE_STORAGE_KEY, String(value));
   } catch {}
 }
 
+function persistScriptLineHeightPreference(value) {
+  try {
+    window.localStorage?.setItem(SCRIPT_LINE_HEIGHT_STORAGE_KEY, String(value));
+  } catch {}
+}
+
 function applyScriptTextSizePreference() {
   document.documentElement.style.setProperty("--script-text-size", `${state.preferences.scriptTextSize}px`);
+}
+
+function applyScriptLineHeightPreference() {
+  document.documentElement.style.setProperty("--script-line-height", String(state.preferences.scriptLineHeight));
 }
 
 function syncScriptTextSizeControls(root = document) {
@@ -331,12 +366,40 @@ function syncScriptTextSizeControls(root = document) {
   });
 }
 
+function formatScriptLineHeightValue(value) {
+  return `${Number(value).toFixed(2)}x`;
+}
+
+function syncScriptLineHeightControls(root = document) {
+  const value = state.preferences.scriptLineHeight.toFixed(2);
+  const displayValue = formatScriptLineHeightValue(state.preferences.scriptLineHeight);
+
+  root.querySelectorAll("[data-script-line-height-input]").forEach((input) => {
+    if (input.value !== value) {
+      input.value = value;
+    }
+  });
+
+  root.querySelectorAll("[data-script-line-height-value]").forEach((element) => {
+    element.textContent = displayValue;
+  });
+}
+
 function setScriptTextSize(value) {
   const nextValue = clampScriptTextSize(value);
   state.preferences.scriptTextSize = nextValue;
   persistScriptTextSizePreference(nextValue);
   applyScriptTextSizePreference();
   syncScriptTextSizeControls();
+  scheduleAutoSizeRichTextareas(elements.editorShell);
+}
+
+function setScriptLineHeight(value) {
+  const nextValue = clampScriptLineHeight(value);
+  state.preferences.scriptLineHeight = nextValue;
+  persistScriptLineHeightPreference(nextValue);
+  applyScriptLineHeightPreference();
+  syncScriptLineHeightControls();
   scheduleAutoSizeRichTextareas(elements.editorShell);
 }
 
@@ -1570,7 +1633,7 @@ function renderOverviewTab(speech) {
         <span class="metric-chip">${version?.rehearsalBullets?.length || 0} rehearsal bullets</span>
       </div>
       <div class="panel-tools">
-        ${renderScriptTextSizeControl()}
+        ${renderScriptReadingControls()}
       </div>
       <div class="script-box">
         <p class="body-copy">${displayText(version?.speechBody, "No speech body yet.")}</p>
@@ -1649,7 +1712,7 @@ function renderVersionsTab(speech) {
           </div>
         </div>
         <div class="panel-tools">
-          ${renderScriptTextSizeControl()}
+          ${renderScriptReadingControls()}
         </div>
         <div class="script-box script-box-compact scroll-area" style="margin-bottom: 14px;">
           <p class="body-copy">${displayText(selectedVersion?.speechBody, "No speech body yet.")}</p>
@@ -2086,6 +2149,34 @@ function renderScriptTextSizeControl(label = "Script Text") {
   `;
 }
 
+function renderScriptLineHeightControl(label = "Line Spacing") {
+  return `
+    <label class="text-size-control">
+      <span class="text-size-label">${escapeHtml(label)}</span>
+      <input
+        class="text-size-slider"
+        type="range"
+        min="${SCRIPT_LINE_HEIGHT_MIN}"
+        max="${SCRIPT_LINE_HEIGHT_MAX}"
+        step="${SCRIPT_LINE_HEIGHT_STEP}"
+        value="${state.preferences.scriptLineHeight.toFixed(2)}"
+        data-script-line-height-input
+        aria-label="Script line spacing"
+      >
+      <span class="meta-chip text-size-value" data-script-line-height-value>${formatScriptLineHeightValue(state.preferences.scriptLineHeight)}</span>
+    </label>
+  `;
+}
+
+function renderScriptReadingControls() {
+  return `
+    <div class="reading-controls">
+      ${renderScriptTextSizeControl()}
+      ${renderScriptLineHeightControl()}
+    </div>
+  `;
+}
+
 function renderPinnedPlaybookGuidance() {
   const pinnedEntries = getPinnedPlaybookEntries();
 
@@ -2140,7 +2231,7 @@ function renderScriptComposer({
           <h3>${escapeHtml(heading)}</h3>
           <p class="editor-card-copy">${escapeHtml(copy)}</p>
         </div>
-        ${renderScriptTextSizeControl()}
+        ${renderScriptReadingControls()}
       </div>
       <div class="field">
         <label for="${escapeHtml(bodyId)}">Speech Body</label>
@@ -2595,6 +2686,7 @@ function renderEditor() {
   document.body.classList.add("drawer-open");
   setEditorBusy(false);
   syncScriptTextSizeControls(elements.editorShell);
+  syncScriptLineHeightControls(elements.editorShell);
   scheduleAutoSizeRichTextareas(elements.editorShell);
 
   const showSpeechDelete = state.editor.kind === "speech" && state.editor.intent === "edit" && Boolean(speech);
@@ -3313,6 +3405,7 @@ function renderApp() {
     renderSpeechList();
   }
   syncScriptTextSizeControls(elements.tabContent);
+  syncScriptLineHeightControls(elements.tabContent);
 }
 
 elements.loginForm.addEventListener("submit", async (event) => {
@@ -3431,11 +3524,17 @@ elements.tabContent.addEventListener("click", (event) => {
   }
 });
 
-function handleScriptTextSizeInput(event) {
+function handleScriptReadingInput(event) {
   const slider = event.target.closest("[data-script-text-size-input]");
-  if (!slider) return;
+  if (slider) {
+    setScriptTextSize(slider.value);
+    return;
+  }
 
-  setScriptTextSize(slider.value);
+  const lineHeightSlider = event.target.closest("[data-script-line-height-input]");
+  if (!lineHeightSlider) return;
+
+  setScriptLineHeight(lineHeightSlider.value);
 }
 
 function handleEditorRichTextareaInput(event) {
@@ -3445,8 +3544,8 @@ function handleEditorRichTextareaInput(event) {
   autoSizeRichTextarea(textarea);
 }
 
-elements.tabContent.addEventListener("input", handleScriptTextSizeInput);
-elements.editorShell.addEventListener("input", handleScriptTextSizeInput);
+elements.tabContent.addEventListener("input", handleScriptReadingInput);
+elements.editorShell.addEventListener("input", handleScriptReadingInput);
 elements.editorShell.addEventListener("input", handleEditorRichTextareaInput);
 
 elements.editorBackdrop.addEventListener("click", () => {
@@ -3546,6 +3645,7 @@ db.auth.onAuthStateChange((event, session) => {
 
 function init() {
   applyScriptTextSizePreference();
+  applyScriptLineHeightPreference();
   updateIdentityUI();
   renderApp();
   requestPageLoad().finally(clearAuthHash);
