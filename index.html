@@ -599,6 +599,10 @@
       gap: 10px;
     }
 
+    .tab-strip {
+      justify-content: center;
+    }
+
     .tab-panel {
       padding: 18px;
     }
@@ -1018,6 +1022,7 @@
       z-index: 1;
       width: min(680px, 100vw);
       height: 100vh;
+      height: 100dvh;
       border-radius: 0;
       border-left: 1px solid var(--line);
       border-right: 0;
@@ -1030,6 +1035,7 @@
     .editor-shell[data-layout="studio"] .editor-drawer {
       width: min(1240px, 100%);
       height: calc(100vh - 36px);
+      height: calc(100dvh - 36px);
       border-radius: 30px;
       border: 1px solid var(--line);
       box-shadow: 0 36px 90px rgba(0, 0, 0, 0.38);
@@ -1043,6 +1049,7 @@
 
     .editor-layout {
       min-height: 100vh;
+      min-height: 100dvh;
       display: grid;
       grid-template-rows: auto auto 1fr auto;
       gap: 18px;
@@ -1050,6 +1057,7 @@
 
     .editor-shell[data-layout="studio"] .editor-layout {
       min-height: calc(100vh - 36px);
+      min-height: calc(100dvh - 36px);
       grid-template-rows: auto 1fr auto;
       gap: 20px;
     }
@@ -1197,12 +1205,18 @@
     }
 
     .editor-footer {
+      position: sticky;
+      bottom: 0;
+      z-index: 2;
       display: flex;
       flex-wrap: wrap;
       justify-content: space-between;
       gap: 12px;
       align-items: center;
-      padding-top: 6px;
+      padding: 14px 0 max(6px, env(safe-area-inset-bottom));
+      background:
+        linear-gradient(180deg, rgba(18, 27, 37, 0), rgba(18, 27, 37, 0.72) 28%, rgba(18, 27, 37, 0.96) 100%);
+      backdrop-filter: blur(8px);
     }
 
     .editor-footer-actions {
@@ -1265,10 +1279,12 @@
       max-width: 18ch;
       max-height: 52vh;
       overflow: auto;
+      padding: 0.08em 0.04em 0.18em;
       font-family: var(--serif);
       font-size: clamp(2rem, 4vw, 4.5rem);
-      line-height: 1.1;
+      line-height: 1.16;
       letter-spacing: -0.03em;
+      overflow-wrap: anywhere;
     }
 
     .progress-shell {
@@ -1359,6 +1375,7 @@
 
       .editor-shell[data-layout="studio"] .editor-drawer {
         height: calc(100vh - 20px);
+        height: calc(100dvh - 20px);
         border-radius: 22px;
       }
 
