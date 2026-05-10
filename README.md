@@ -120,7 +120,7 @@ Local context note for sessions started in the standalone `speeches` repo.
 
 - Important: when speeches UI changes appear not to register after deploy, check for stale cached JS.
 - The speeches page currently cache-busts the module URL in `index.html`:
-  - `./assets/js/brajesh-speeches.js?v=20260510i`
+  - `./assets/js/brajesh-speeches.js?v=20260510j`
 - If future speeches JS changes appear missing in production, bump that query-string version.
 
 ## Useful Starting Point
