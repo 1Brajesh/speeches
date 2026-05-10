@@ -67,6 +67,7 @@ Local context note for sessions started in the standalone `speeches` repo.
 
 - Creating a new speech also creates its first version.
 - Saving a version updates the speech's `active_version_id`.
+- The selected version can be deleted from `Versions`, but each speech keeps at least one version.
 - Logging a run usually moves the speech to `delivered`, except when:
   - the speech is still `idea`
   - the run result is `scheduled`
@@ -78,8 +79,10 @@ Local context note for sessions started in the standalone `speeches` repo.
 
 ## Recent UI State
 
-- As of 2026-05-08:
+- As of 2026-05-10:
   - `Versions` uses a collapsible `Version History` panel.
+  - `Versions` shows explicit `Last edited` timestamps with local time.
+  - the selected version can be deleted from the `Versions` detail header when the speech has more than one version.
   - `Edit Script` uses a collapsible `Rehearsal Bullets` panel.
   - script text size is user-controlled with a `16-28` slider and stored in local browser storage.
   - the same script text-size setting affects:
@@ -95,7 +98,7 @@ Local context note for sessions started in the standalone `speeches` repo.
 
 - Important: when speeches UI changes appear not to register after deploy, check for stale cached JS.
 - The speeches page currently cache-busts the module URL in `index.html`:
-  - `./assets/js/brajesh-speeches.js?v=20260508c`
+  - `./assets/js/brajesh-speeches.js?v=20260510a`
 - If future speeches JS changes appear missing in production, bump that query-string version.
 
 ## Useful Starting Point

@@ -47,6 +47,7 @@ let pageLoadPromise = null;
 let pageReloadQueued = false;
 let editorBusy = false;
 let speechDeleteBusy = false;
+let versionDeleteBusy = false;
 
 const elements = {
   pageStatus: document.querySelector("#pageStatus"),
@@ -394,8 +395,27 @@ function createUniqueDeliveryId(speech) {
   return candidate;
 }
 
-function dateOnly(value) {
-  return String(value || "").slice(0, 10);
+function parseDateOnlyValue(value) {
+  const normalizedValue = String(value || "").trim();
+  if (!normalizedValue) return null;
+
+  const date = new Date(`${normalizedValue.slice(0, 10)}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function parseTimestampValue(value) {
+  const normalizedValue = String(value || "").trim();
+  if (!normalizedValue) return null;
+
+  const date = normalizedValue.includes("T")
+    ? new Date(normalizedValue)
+    : new Date(`${normalizedValue}T12:00:00`);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function timestampMs(value) {
+  return parseTimestampValue(value)?.getTime() || 0;
 }
 
 function ensureTextArray(value) {
@@ -414,8 +434,8 @@ function mapSpeechData(speechRows, versionRows, runRows) {
     tags: ensureTextArray(row.tags),
     notes: row.notes || "",
     activeVersionId: row.active_version_id || null,
-    createdAt: dateOnly(row.created_at),
-    updatedAt: dateOnly(row.updated_at),
+    createdAt: row.created_at || "",
+    updatedAt: row.updated_at || row.created_at || "",
     versions: [],
     deliveries: [],
   }));
@@ -431,7 +451,7 @@ function mapSpeechData(speechRows, versionRows, runRows) {
       label: row.label || "Untitled Version",
       basedOn: row.based_on_version_id || null,
       estimatedMinutes: row.estimated_minutes || 0,
-      updatedAt: dateOnly(row.updated_at || row.created_at),
+      updatedAt: row.updated_at || row.created_at || "",
       revisionNote: row.revision_note || "",
       speechBody: row.speech_body || "",
       rehearsalBullets: ensureTextArray(row.rehearsal_bullets),
@@ -466,8 +486,8 @@ function mapSpeechData(speechRows, versionRows, runRows) {
 
   speeches.forEach((speech) => {
     speech.versions.sort((a, b) => {
-      const timeA = new Date(`${a.updatedAt || "1970-01-01"}T12:00:00`).getTime();
-      const timeB = new Date(`${b.updatedAt || "1970-01-01"}T12:00:00`).getTime();
+      const timeA = timestampMs(a.updatedAt);
+      const timeB = timestampMs(b.updatedAt);
       return timeA - timeB;
     });
 
@@ -477,8 +497,8 @@ function mapSpeechData(speechRows, versionRows, runRows) {
   });
 
   return speeches.sort((a, b) => {
-    const timeA = new Date(`${a.updatedAt || a.createdAt || "1970-01-01"}T12:00:00`).getTime();
-    const timeB = new Date(`${b.updatedAt || b.createdAt || "1970-01-01"}T12:00:00`).getTime();
+    const timeA = timestampMs(a.updatedAt || a.createdAt);
+    const timeB = timestampMs(b.updatedAt || b.createdAt);
     return timeB - timeA;
   });
 }
@@ -608,13 +628,28 @@ function statusLabel(status) {
 function formatDate(value) {
   if (!value) return "Undated";
 
-  const date = new Date(`${value}T12:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
+  const date = parseDateOnlyValue(value);
+  if (!date) return String(value);
 
   return new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",
     year: "numeric",
+  }).format(date);
+}
+
+function formatDateTime(value) {
+  if (!value) return "Unknown";
+
+  const date = parseTimestampValue(value);
+  if (!date) return String(value);
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   }).format(date);
 }
 
@@ -720,6 +755,13 @@ function getSelectedDeliveryForSpeech(speech) {
   if (explicit) return explicit;
 
   return sortDeliveries(speech.deliveries)[0];
+}
+
+function getLatestVersionForSpeech(speech, excludeVersionId = "") {
+  if (!speech?.versions?.length) return null;
+
+  const candidates = speech.versions.filter((version) => version.id !== excludeVersionId);
+  return candidates.length ? candidates[candidates.length - 1] : null;
 }
 
 function setLibraryStatus(text, tone = "") {
@@ -1023,6 +1065,8 @@ function renderVersionsTab(speech) {
   const selectedVersion = getSelectedVersionForSpeech(speech);
   const basedOnVersion = selectedVersion?.basedOn ? getVersionById(speech, selectedVersion.basedOn) : null;
   const versionHistoryOpen = isPanelOpen("version-history");
+  const canDeleteVersion = Boolean(selectedVersion) && speech.versions.length > 1;
+  const editTimestampLabel = selectedVersion ? `Last edited ${formatDateTime(selectedVersion.updatedAt)}` : "No version selected";
 
   return `
     <div class="reader-stack">
@@ -1030,7 +1074,7 @@ function renderVersionsTab(speech) {
         <summary class="collapse-summary">
           <div>
             <h4>Version History</h4>
-            <p class="collapse-summary-copy">Selected draft: ${displayText(selectedVersion?.label, "No version")}.</p>
+            <p class="collapse-summary-copy">Selected version: ${displayText(selectedVersion?.label, "No version")}.</p>
           </div>
           <div class="collapse-summary-meta">
             <span class="meta-chip">${speech.versions.length} total</span>
@@ -1044,7 +1088,7 @@ function renderVersionsTab(speech) {
                 <button class="version-button" type="button" data-version-id="${version.id}">
                   <div class="version-title">${displayText(version.label)}</div>
                   <div class="timeline-meta">
-                    <span>${formatDate(version.updatedAt)}</span>
+                    <span>${displayText(`Last edited ${formatDateTime(version.updatedAt)}`)}</span>
                     <span>${version.estimatedMinutes} min</span>
                     <span>${version.rehearsalBullets.length} bullets</span>
                   </div>
@@ -1061,8 +1105,10 @@ function renderVersionsTab(speech) {
           <h4>${displayText(selectedVersion?.label, "Version Detail")}</h4>
           <div class="button-row">
             <span class="meta-chip">${displayText(basedOnVersion ? `Based on ${basedOnVersion.label}` : "Original version")}</span>
+            <span class="meta-chip">${displayText(editTimestampLabel)}</span>
             <button class="ghost-button" type="button" data-action="new-version">New Version</button>
             <button class="script-button" type="button" data-action="edit-version">Edit Script</button>
+            ${canDeleteVersion ? '<button class="danger-button" type="button" data-action="delete-version">Delete Version</button>' : '<span class="meta-chip">Keep at least 1 version</span>'}
           </div>
         </div>
         <div class="panel-tools">
@@ -2134,6 +2180,95 @@ async function deleteSpeech() {
   }
 }
 
+async function deleteVersion() {
+  const speech = ensureSelection();
+  const version = getSelectedVersionForSpeech(speech);
+
+  if (!speech || !version || versionDeleteBusy) {
+    return;
+  }
+
+  if (speech.versions.length <= 1) {
+    setPageStatus("A speech must keep at least one version. Delete the speech if you want to remove everything.", "error");
+    return;
+  }
+
+  const linkedRunCount = speech.deliveries.filter((delivery) => delivery.versionId === version.id).length;
+  const basedOnCount = speech.versions.filter((candidate) => candidate.basedOn === version.id).length;
+  const fallbackVersion = speech.activeVersionId && speech.activeVersionId !== version.id
+    ? getVersionById(speech, speech.activeVersionId)
+    : getLatestVersionForSpeech(speech, version.id);
+
+  const confirmationLines = [
+    `Delete version "${version.label}"?`,
+    "",
+    "This permanently removes the selected script version.",
+  ];
+
+  if (speech.activeVersionId === version.id && fallbackVersion) {
+    confirmationLines.push(`The active version will switch to "${fallbackVersion.label}".`);
+  }
+
+  if (linkedRunCount) {
+    confirmationLines.push(
+      linkedRunCount === 1
+        ? "1 run will keep its feedback, but its version-used link will be cleared."
+        : `${linkedRunCount} runs will keep their feedback, but their version-used links will be cleared.`,
+    );
+  }
+
+  if (basedOnCount) {
+    confirmationLines.push(
+      basedOnCount === 1
+        ? "1 newer version will stay in place, but its based-on link will be cleared."
+        : `${basedOnCount} newer versions will stay in place, but their based-on links will be cleared.`,
+    );
+  }
+
+  const confirmed = window.confirm(confirmationLines.join("\n\n"));
+  if (!confirmed) {
+    return;
+  }
+
+  versionDeleteBusy = true;
+  setPageStatus(`Deleting version "${version.label}"...`);
+
+  try {
+    if (speech.activeVersionId === version.id && fallbackVersion) {
+      const { error: activeVersionError } = await db
+        .from("brajesh_speeches")
+        .update({ active_version_id: fallbackVersion.id })
+        .eq("id", speech.id);
+
+      if (activeVersionError) throw activeVersionError;
+    }
+
+    const { error } = await db
+      .from("brajesh_speech_versions")
+      .delete()
+      .eq("id", version.id);
+
+    if (error) throw error;
+
+    state.selectedSpeechId = speech.id;
+    state.selectedVersionId = fallbackVersion?.id || null;
+
+    if (state.rehearsal.versionId === version.id) {
+      state.rehearsal.speechId = null;
+      state.rehearsal.versionId = null;
+      state.rehearsal.index = 0;
+      closeRehearsal();
+    }
+
+    await loadSpeeches({ silent: true });
+    setPageStatus(`Deleted version "${version.label}".`, "ok");
+  } catch (error) {
+    setPageStatus(error.message || `Could not delete version "${version.label}".`, "error");
+  } finally {
+    versionDeleteBusy = false;
+  }
+}
+
 function openRehearsal() {
   const speech = ensureSelection();
   const version = getSelectedVersionForSpeech(speech);
@@ -2212,6 +2347,11 @@ function runAction(action) {
 
   if (action === "new-version" && speech) {
     openVersionEditor({ speechId: speech.id });
+    return;
+  }
+
+  if (action === "delete-version" && speech) {
+    deleteVersion();
     return;
   }
 
