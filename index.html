@@ -25,6 +25,7 @@
       --radius: 26px;
       --script-text-size: 20px;
       --script-line-height: 1.76;
+      --script-paragraph-gap: 1.76em;
       --serif: "Iowan Old Style", "Baskerville", Georgia, serif;
       --sans: "Avenir Next", "Segoe UI", Helvetica, Arial, sans-serif;
     }
@@ -717,10 +718,16 @@
     }
 
     .script-box .body-copy {
+      margin: 0;
       white-space: pre-wrap;
       line-height: var(--script-line-height);
       font-family: var(--serif);
       font-size: var(--script-text-size);
+    }
+
+    .script-paragraphs {
+      display: grid;
+      gap: var(--script-paragraph-gap);
     }
 
     .script-box-compact {
@@ -764,7 +771,7 @@
 
     .compare-segment-list {
       display: grid;
-      gap: 12px;
+      gap: min(calc(var(--script-paragraph-gap) * 0.55), 24px);
     }
 
     .compare-segment,
@@ -1607,6 +1614,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260510f"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260510g"></script>
 </body>
 </html>

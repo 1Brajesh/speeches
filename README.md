@@ -97,6 +97,7 @@ Local context note for sessions started in the standalone `speeches` repo.
   - `Edit Script` uses a collapsible `Rehearsal Bullets` panel.
   - script text size is user-controlled with a `16-28` slider and stored in local browser storage.
   - script line spacing is also user-controlled with a persistent slider.
+  - paragraph spacing in reading views is user-controlled with a persistent slider.
   - the same script text-size setting affects:
     - overview speech body
     - versions speech body
@@ -106,6 +107,10 @@ Local context note for sessions started in the standalone `speeches` repo.
     - versions speech body
     - compare mode speech body
     - `Edit Script` speech-body textarea
+  - the same paragraph-spacing setting affects:
+    - overview speech body
+    - versions speech body
+    - compare mode speech body
   - `Edit Script` speech body auto-sizes to content in the editor.
   - the `Versions` speech body is intentionally compact and scrollable.
   - `Edit Script` pills are green-themed.
@@ -115,7 +120,7 @@ Local context note for sessions started in the standalone `speeches` repo.
 
 - Important: when speeches UI changes appear not to register after deploy, check for stale cached JS.
 - The speeches page currently cache-busts the module URL in `index.html`:
-  - `./assets/js/brajesh-speeches.js?v=20260510f`
+  - `./assets/js/brajesh-speeches.js?v=20260510g`
 - If future speeches JS changes appear missing in production, bump that query-string version.
 
 ## Useful Starting Point

@@ -8,6 +8,7 @@ import {
 const db = createBrajeshClient();
 const SCRIPT_TEXT_SIZE_STORAGE_KEY = "brajesh_speeches_script_text_size";
 const SCRIPT_LINE_HEIGHT_STORAGE_KEY = "brajesh_speeches_script_line_height";
+const SCRIPT_PARAGRAPH_SPACING_STORAGE_KEY = "brajesh_speeches_script_paragraph_spacing";
 const SCRIPT_TEXT_SIZE_MIN = 16;
 const SCRIPT_TEXT_SIZE_MAX = 28;
 const SCRIPT_TEXT_SIZE_DEFAULT = 20;
@@ -15,6 +16,10 @@ const SCRIPT_LINE_HEIGHT_MIN = 1.2;
 const SCRIPT_LINE_HEIGHT_MAX = 2.2;
 const SCRIPT_LINE_HEIGHT_STEP = 0.02;
 const SCRIPT_LINE_HEIGHT_DEFAULT = 1.76;
+const SCRIPT_PARAGRAPH_SPACING_MIN = 0.6;
+const SCRIPT_PARAGRAPH_SPACING_MAX = 2.6;
+const SCRIPT_PARAGRAPH_SPACING_STEP = 0.05;
+const SCRIPT_PARAGRAPH_SPACING_DEFAULT = 1.76;
 
 const state = {
   user: null,
@@ -39,6 +44,7 @@ const state = {
   preferences: {
     scriptTextSize: loadScriptTextSizePreference(),
     scriptLineHeight: loadScriptLineHeightPreference(),
+    scriptParagraphSpacing: loadScriptParagraphSpacingPreference(),
   },
   panels: {
     "version-history": false,
@@ -331,6 +337,25 @@ function loadScriptLineHeightPreference() {
   }
 }
 
+function clampScriptParagraphSpacing(value) {
+  const parsed = Number.parseFloat(String(value || ""));
+
+  if (Number.isNaN(parsed)) {
+    return SCRIPT_PARAGRAPH_SPACING_DEFAULT;
+  }
+
+  const clamped = Math.min(SCRIPT_PARAGRAPH_SPACING_MAX, Math.max(SCRIPT_PARAGRAPH_SPACING_MIN, parsed));
+  return Math.round(clamped * 100) / 100;
+}
+
+function loadScriptParagraphSpacingPreference() {
+  try {
+    return clampScriptParagraphSpacing(window.localStorage?.getItem(SCRIPT_PARAGRAPH_SPACING_STORAGE_KEY));
+  } catch {
+    return SCRIPT_PARAGRAPH_SPACING_DEFAULT;
+  }
+}
+
 function persistScriptTextSizePreference(value) {
   try {
     window.localStorage?.setItem(SCRIPT_TEXT_SIZE_STORAGE_KEY, String(value));
@@ -343,12 +368,22 @@ function persistScriptLineHeightPreference(value) {
   } catch {}
 }
 
+function persistScriptParagraphSpacingPreference(value) {
+  try {
+    window.localStorage?.setItem(SCRIPT_PARAGRAPH_SPACING_STORAGE_KEY, String(value));
+  } catch {}
+}
+
 function applyScriptTextSizePreference() {
   document.documentElement.style.setProperty("--script-text-size", `${state.preferences.scriptTextSize}px`);
 }
 
 function applyScriptLineHeightPreference() {
   document.documentElement.style.setProperty("--script-line-height", String(state.preferences.scriptLineHeight));
+}
+
+function applyScriptParagraphSpacingPreference() {
+  document.documentElement.style.setProperty("--script-paragraph-gap", `${state.preferences.scriptParagraphSpacing}em`);
 }
 
 function syncScriptTextSizeControls(root = document) {
@@ -385,6 +420,25 @@ function syncScriptLineHeightControls(root = document) {
   });
 }
 
+function formatScriptParagraphSpacingValue(value) {
+  return `${Number(value).toFixed(2)}x`;
+}
+
+function syncScriptParagraphSpacingControls(root = document) {
+  const value = state.preferences.scriptParagraphSpacing.toFixed(2);
+  const displayValue = formatScriptParagraphSpacingValue(state.preferences.scriptParagraphSpacing);
+
+  root.querySelectorAll("[data-script-paragraph-spacing-input]").forEach((input) => {
+    if (input.value !== value) {
+      input.value = value;
+    }
+  });
+
+  root.querySelectorAll("[data-script-paragraph-spacing-value]").forEach((element) => {
+    element.textContent = displayValue;
+  });
+}
+
 function setScriptTextSize(value) {
   const nextValue = clampScriptTextSize(value);
   state.preferences.scriptTextSize = nextValue;
@@ -401,6 +455,14 @@ function setScriptLineHeight(value) {
   applyScriptLineHeightPreference();
   syncScriptLineHeightControls();
   scheduleAutoSizeRichTextareas(elements.editorShell);
+}
+
+function setScriptParagraphSpacing(value) {
+  const nextValue = clampScriptParagraphSpacing(value);
+  state.preferences.scriptParagraphSpacing = nextValue;
+  persistScriptParagraphSpacingPreference(nextValue);
+  applyScriptParagraphSpacingPreference();
+  syncScriptParagraphSpacingControls();
 }
 
 function isPanelOpen(key) {
@@ -799,6 +861,18 @@ function splitCompareSegments(text) {
     .filter(Boolean);
 }
 
+function splitDisplayParagraphs(text) {
+  const normalized = normalizeCompareText(text);
+  if (!normalized) {
+    return [];
+  }
+
+  return normalized
+    .split(/\n\s*\n+/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+}
+
 function diffCompareSegments(previousSegments, nextSegments) {
   const rowCount = previousSegments.length + 1;
   const columnCount = nextSegments.length + 1;
@@ -894,6 +968,20 @@ function renderCompareBlocks(blocks = [], emptyText = "Nothing here yet.") {
       ${blocks.map((block) => `
         <p class="compare-segment" data-state="${block.state}">${displayText(block.text)}</p>
       `).join("")}
+    </div>
+  `;
+}
+
+function renderScriptBodyText(text, fallback = "No speech body yet.") {
+  const paragraphs = splitDisplayParagraphs(text);
+
+  if (!paragraphs.length) {
+    return `<p class="body-copy">${displayText(fallback)}</p>`;
+  }
+
+  return `
+    <div class="script-paragraphs">
+      ${paragraphs.map((paragraph) => `<p class="body-copy">${displayText(paragraph)}</p>`).join("")}
     </div>
   `;
 }
@@ -1636,7 +1724,7 @@ function renderOverviewTab(speech) {
         ${renderScriptReadingControls()}
       </div>
       <div class="script-box">
-        <p class="body-copy">${displayText(version?.speechBody, "No speech body yet.")}</p>
+        ${renderScriptBodyText(version?.speechBody, "No speech body yet.")}
       </div>
     </div>
   `;
@@ -1715,7 +1803,7 @@ function renderVersionsTab(speech) {
           ${renderScriptReadingControls()}
         </div>
         <div class="script-box script-box-compact scroll-area" style="margin-bottom: 14px;">
-          <p class="body-copy">${displayText(selectedVersion?.speechBody, "No speech body yet.")}</p>
+          ${renderScriptBodyText(selectedVersion?.speechBody, "No speech body yet.")}
         </div>
         <div class="notes-box">
           <div class="panel-head">
@@ -2168,11 +2256,33 @@ function renderScriptLineHeightControl(label = "Line Spacing") {
   `;
 }
 
-function renderScriptReadingControls() {
+function renderScriptParagraphSpacingControl(label = "Paragraph Spacing") {
+  return `
+    <label class="text-size-control">
+      <span class="text-size-label">${escapeHtml(label)}</span>
+      <input
+        class="text-size-slider"
+        type="range"
+        min="${SCRIPT_PARAGRAPH_SPACING_MIN}"
+        max="${SCRIPT_PARAGRAPH_SPACING_MAX}"
+        step="${SCRIPT_PARAGRAPH_SPACING_STEP}"
+        value="${state.preferences.scriptParagraphSpacing.toFixed(2)}"
+        data-script-paragraph-spacing-input
+        aria-label="Script paragraph spacing"
+      >
+      <span class="meta-chip text-size-value" data-script-paragraph-spacing-value>${formatScriptParagraphSpacingValue(state.preferences.scriptParagraphSpacing)}</span>
+    </label>
+  `;
+}
+
+function renderScriptReadingControls(options = {}) {
+  const { includeParagraphSpacing = true } = options;
+
   return `
     <div class="reading-controls">
       ${renderScriptTextSizeControl()}
       ${renderScriptLineHeightControl()}
+      ${includeParagraphSpacing ? renderScriptParagraphSpacingControl() : ""}
     </div>
   `;
 }
@@ -2231,7 +2341,7 @@ function renderScriptComposer({
           <h3>${escapeHtml(heading)}</h3>
           <p class="editor-card-copy">${escapeHtml(copy)}</p>
         </div>
-        ${renderScriptReadingControls()}
+        ${renderScriptReadingControls({ includeParagraphSpacing: false })}
       </div>
       <div class="field">
         <label for="${escapeHtml(bodyId)}">Speech Body</label>
@@ -2687,6 +2797,7 @@ function renderEditor() {
   setEditorBusy(false);
   syncScriptTextSizeControls(elements.editorShell);
   syncScriptLineHeightControls(elements.editorShell);
+  syncScriptParagraphSpacingControls(elements.editorShell);
   scheduleAutoSizeRichTextareas(elements.editorShell);
 
   const showSpeechDelete = state.editor.kind === "speech" && state.editor.intent === "edit" && Boolean(speech);
@@ -3406,6 +3517,7 @@ function renderApp() {
   }
   syncScriptTextSizeControls(elements.tabContent);
   syncScriptLineHeightControls(elements.tabContent);
+  syncScriptParagraphSpacingControls(elements.tabContent);
 }
 
 elements.loginForm.addEventListener("submit", async (event) => {
@@ -3532,9 +3644,15 @@ function handleScriptReadingInput(event) {
   }
 
   const lineHeightSlider = event.target.closest("[data-script-line-height-input]");
-  if (!lineHeightSlider) return;
+  if (lineHeightSlider) {
+    setScriptLineHeight(lineHeightSlider.value);
+    return;
+  }
 
-  setScriptLineHeight(lineHeightSlider.value);
+  const paragraphSpacingSlider = event.target.closest("[data-script-paragraph-spacing-input]");
+  if (!paragraphSpacingSlider) return;
+
+  setScriptParagraphSpacing(paragraphSpacingSlider.value);
 }
 
 function handleEditorRichTextareaInput(event) {
@@ -3646,6 +3764,7 @@ db.auth.onAuthStateChange((event, session) => {
 function init() {
   applyScriptTextSizePreference();
   applyScriptLineHeightPreference();
+  applyScriptParagraphSpacingPreference();
   updateIdentityUI();
   renderApp();
   requestPageLoad().finally(clearAuthHash);
