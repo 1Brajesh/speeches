@@ -441,20 +441,26 @@ function syncScriptParagraphSpacingControls(root = document) {
 
 function setScriptTextSize(value) {
   const nextValue = clampScriptTextSize(value);
+  const preserveScrollContainer = elements.editorShell.dataset.layout === "studio"
+    ? elements.editorFields
+    : null;
   state.preferences.scriptTextSize = nextValue;
   persistScriptTextSizePreference(nextValue);
   applyScriptTextSizePreference();
   syncScriptTextSizeControls();
-  scheduleAutoSizeRichTextareas(elements.editorShell);
+  scheduleAutoSizeRichTextareas(elements.editorShell, { preserveScrollContainer });
 }
 
 function setScriptLineHeight(value) {
   const nextValue = clampScriptLineHeight(value);
+  const preserveScrollContainer = elements.editorShell.dataset.layout === "studio"
+    ? elements.editorFields
+    : null;
   state.preferences.scriptLineHeight = nextValue;
   persistScriptLineHeightPreference(nextValue);
   applyScriptLineHeightPreference();
   syncScriptLineHeightControls();
-  scheduleAutoSizeRichTextareas(elements.editorShell);
+  scheduleAutoSizeRichTextareas(elements.editorShell, { preserveScrollContainer });
 }
 
 function setScriptParagraphSpacing(value) {
@@ -497,9 +503,17 @@ function autoSizeRichTextareas(root = document) {
   });
 }
 
-function scheduleAutoSizeRichTextareas(root = document) {
+function scheduleAutoSizeRichTextareas(root = document, options = {}) {
+  const { preserveScrollContainer = null } = options;
   window.requestAnimationFrame(() => {
+    const scrollTop = preserveScrollContainer?.scrollTop ?? 0;
+    const scrollLeft = preserveScrollContainer?.scrollLeft ?? 0;
     autoSizeRichTextareas(root);
+
+    if (preserveScrollContainer) {
+      preserveScrollContainer.scrollTop = scrollTop;
+      preserveScrollContainer.scrollLeft = scrollLeft;
+    }
   });
 }
 
