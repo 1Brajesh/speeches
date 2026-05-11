@@ -84,8 +84,7 @@ const elements = {
   sessionHint: document.querySelector("#sessionHint"),
   logoutButton: document.querySelector("#logoutButton"),
   adminIdentity: document.querySelector("#adminIdentity"),
-  workspaceNav: document.querySelector("#workspaceNav"),
-  workspaceButtons: Array.from(document.querySelectorAll("[data-workspace-switch]")),
+  workspaceToggleButton: document.querySelector("#workspaceToggleButton"),
   appShell: document.querySelector("#appShell"),
   libraryEyebrow: document.querySelector("#libraryEyebrow"),
   libraryTitle: document.querySelector("#libraryTitle"),
@@ -197,7 +196,7 @@ function updateIdentityUI() {
 function showLogin() {
   elements.loginPanel.hidden = false;
   elements.appShell.hidden = true;
-  elements.workspaceNav.hidden = true;
+  elements.workspaceToggleButton.hidden = true;
   elements.newIdeaButton.hidden = true;
   elements.newSpeechButton.hidden = true;
   elements.newPlaybookButton.hidden = true;
@@ -209,7 +208,7 @@ function showLogin() {
 function showApp() {
   elements.loginPanel.hidden = true;
   elements.appShell.hidden = false;
-  elements.workspaceNav.hidden = false;
+  elements.workspaceToggleButton.hidden = false;
   elements.logoutButton.hidden = false;
 }
 
@@ -1319,19 +1318,43 @@ function renderTopActions() {
   const showSpeeches = state.workspaceView === "speeches";
   const showPlaybook = state.workspaceView === "playbook";
 
-  elements.workspaceNav.hidden = !state.user;
-  elements.workspaceButtons.forEach((button) => {
-    button.setAttribute("aria-pressed", String(button.dataset.workspaceSwitch === state.workspaceView));
-  });
-  elements.newIdeaButton.hidden = showPlaybook || !state.user;
-  elements.newSpeechButton.hidden = !showSpeeches || !state.user;
-  elements.newPlaybookButton.hidden = !showPlaybook || !state.user;
+  elements.workspaceToggleButton.hidden = !state.user;
+  elements.newIdeaButton.hidden = !state.user;
+  elements.newSpeechButton.hidden = !state.user;
+  elements.newPlaybookButton.hidden = !state.user;
+
+  if (showSpeeches) {
+    elements.workspaceToggleButton.textContent = "Playbook";
+    elements.workspaceToggleButton.className = "ghost-button";
+    elements.newIdeaButton.textContent = "New Idea";
+    elements.newIdeaButton.className = "ghost-button";
+    elements.newSpeechButton.hidden = false;
+    elements.newSpeechButton.textContent = "New Speech";
+    elements.newSpeechButton.className = "primary-button";
+    elements.newPlaybookButton.hidden = true;
+    return;
+  }
 
   if (showIdeas) {
-    elements.newIdeaButton.className = "primary-button";
-  } else {
+    elements.workspaceToggleButton.textContent = "Speech Library";
+    elements.workspaceToggleButton.className = "ghost-button";
+    elements.newIdeaButton.textContent = "Playbook";
     elements.newIdeaButton.className = "ghost-button";
+    elements.newSpeechButton.hidden = false;
+    elements.newSpeechButton.textContent = "New Idea";
+    elements.newSpeechButton.className = "primary-button";
+    elements.newPlaybookButton.hidden = true;
+    return;
   }
+
+  elements.workspaceToggleButton.textContent = "Speech Library";
+  elements.workspaceToggleButton.className = "ghost-button";
+  elements.newIdeaButton.textContent = "Ideas";
+  elements.newIdeaButton.className = "ghost-button";
+  elements.newSpeechButton.hidden = true;
+  elements.newPlaybookButton.hidden = false;
+  elements.newPlaybookButton.textContent = "New Principle";
+  elements.newPlaybookButton.className = "primary-button";
 }
 
 function renderWorkspaceRail() {
@@ -4237,11 +4260,13 @@ elements.logoutButton.addEventListener("click", () => {
   handleSignOut();
 });
 
-elements.workspaceNav.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-workspace-switch]");
-  if (!button) return;
+elements.workspaceToggleButton.addEventListener("click", () => {
+  if (state.workspaceView === "speeches") {
+    runAction("show-playbook");
+    return;
+  }
 
-  runAction(`show-${button.dataset.workspaceSwitch}`);
+  runAction("show-speeches");
 });
 
 elements.searchInput.addEventListener("input", () => {
@@ -4270,10 +4295,25 @@ elements.filterBar.addEventListener("click", (event) => {
 });
 
 elements.newIdeaButton.addEventListener("click", () => {
-  runAction("new-idea");
+  if (state.workspaceView === "speeches") {
+    runAction("new-idea");
+    return;
+  }
+
+  if (state.workspaceView === "ideas") {
+    runAction("show-playbook");
+    return;
+  }
+
+  runAction("show-ideas");
 });
 
 elements.newSpeechButton.addEventListener("click", () => {
+  if (state.workspaceView === "ideas") {
+    runAction("new-idea");
+    return;
+  }
+
   runAction("new-speech");
 });
 
