@@ -23,13 +23,17 @@ const SCRIPT_PARAGRAPH_SPACING_DEFAULT = 1.76;
 
 const state = {
   user: null,
+  ideas: [],
   speeches: [],
   playbookEntries: [],
   workspaceView: "speeches",
+  ideaSearch: "",
   search: "",
   playbookSearch: "",
+  ideaFilter: "all",
   filter: "all",
   playbookFilter: "all",
+  selectedIdeaId: null,
   selectedSpeechId: null,
   selectedVersionId: null,
   selectedDeliveryId: null,
@@ -57,14 +61,17 @@ const state = {
     speechId: null,
     versionId: null,
     deliveryId: null,
+    ideaId: null,
     playbookId: null,
     statusPreset: "draft",
     sourceVersionId: null,
+    sourceIdeaId: null,
   },
 };
 let pageLoadPromise = null;
 let pageReloadQueued = false;
 let editorBusy = false;
+let ideaDeleteBusy = false;
 let speechDeleteBusy = false;
 let versionDeleteBusy = false;
 let playbookDeleteBusy = false;
@@ -77,7 +84,8 @@ const elements = {
   sessionHint: document.querySelector("#sessionHint"),
   logoutButton: document.querySelector("#logoutButton"),
   adminIdentity: document.querySelector("#adminIdentity"),
-  workspaceToggleButton: document.querySelector("#workspaceToggleButton"),
+  workspaceNav: document.querySelector("#workspaceNav"),
+  workspaceButtons: Array.from(document.querySelectorAll("[data-workspace-switch]")),
   appShell: document.querySelector("#appShell"),
   libraryEyebrow: document.querySelector("#libraryEyebrow"),
   libraryTitle: document.querySelector("#libraryTitle"),
@@ -151,7 +159,9 @@ function describeLoadError(error) {
   const message = String(error?.message || "").trim();
 
   if (
-    message.includes("brajesh_speeches")
+    message.includes("brajesh_speech_ideas")
+    || message.includes("brajesh_speech_idea")
+    || message.includes("brajesh_speeches")
     || message.includes("brajesh_speech_versions")
     || message.includes("brajesh_speech_runs")
     || message.includes("brajesh_speech_playbook")
@@ -187,7 +197,7 @@ function updateIdentityUI() {
 function showLogin() {
   elements.loginPanel.hidden = false;
   elements.appShell.hidden = true;
-  elements.workspaceToggleButton.hidden = true;
+  elements.workspaceNav.hidden = true;
   elements.newIdeaButton.hidden = true;
   elements.newSpeechButton.hidden = true;
   elements.newPlaybookButton.hidden = true;
@@ -199,7 +209,7 @@ function showLogin() {
 function showApp() {
   elements.loginPanel.hidden = true;
   elements.appShell.hidden = false;
-  elements.workspaceToggleButton.hidden = false;
+  elements.workspaceNav.hidden = false;
   elements.logoutButton.hidden = false;
 }
 
@@ -215,9 +225,11 @@ function clearAuthHash() {
 }
 
 function resetSpeechState() {
+  state.ideas = [];
   state.speeches = [];
   state.playbookEntries = [];
   state.workspaceView = "speeches";
+  state.selectedIdeaId = null;
   state.selectedSpeechId = null;
   state.selectedVersionId = null;
   state.selectedDeliveryId = null;
@@ -673,6 +685,26 @@ function mapSpeechData(speechRows, versionRows, runRows) {
   });
 }
 
+function mapIdeaData(ideaRows) {
+  return (ideaRows || [])
+    .map((row) => ({
+      id: row.id,
+      title: row.title || "Untitled Idea",
+      idea: row.idea || "",
+      tags: ensureTextArray(row.tags),
+      expandedSpeechId: row.expanded_speech_id || null,
+      createdAt: row.created_at || "",
+      updatedAt: row.updated_at || row.created_at || "",
+    }))
+    .sort((a, b) => {
+      if (Boolean(a.expandedSpeechId) !== Boolean(b.expandedSpeechId)) {
+        return a.expandedSpeechId ? 1 : -1;
+      }
+
+      return timestampMs(b.updatedAt || b.createdAt) - timestampMs(a.updatedAt || a.createdAt);
+    });
+}
+
 function mapPlaybookData(playbookRows) {
   return (playbookRows || [])
     .map((row) => ({
@@ -700,7 +732,11 @@ async function loadSpeeches(options = {}) {
     setPageStatus("Loading speeches.");
   }
 
-  const [speechResult, versionResult, runResult, playbookResult] = await Promise.all([
+  const [ideaResult, speechResult, versionResult, runResult, playbookResult] = await Promise.all([
+    db
+      .from("brajesh_speech_ideas")
+      .select("id, title, idea, tags, expanded_speech_id, created_at, updated_at")
+      .order("updated_at", { ascending: false }),
     db
       .from("brajesh_speeches")
       .select("id, title, status, goal, core_idea, tags, notes, active_version_id, created_at, updated_at")
@@ -721,11 +757,13 @@ async function loadSpeeches(options = {}) {
       .order("updated_at", { ascending: false }),
   ]);
 
+  if (ideaResult.error) throw ideaResult.error;
   if (speechResult.error) throw speechResult.error;
   if (versionResult.error) throw versionResult.error;
   if (runResult.error) throw runResult.error;
   if (playbookResult.error) throw playbookResult.error;
 
+  state.ideas = mapIdeaData(ideaResult.data);
   state.speeches = mapSpeechData(speechResult.data, versionResult.data, runResult.data);
   state.playbookEntries = mapPlaybookData(playbookResult.data);
   showApp();
@@ -855,6 +893,11 @@ function formatDateTime(value) {
 function versionWordCount(version) {
   if (!version?.speechBody) return 0;
   return String(version.speechBody).trim().split(/\s+/).filter(Boolean).length;
+}
+
+function ideaWordCount(idea) {
+  if (!idea?.idea) return 0;
+  return String(idea.idea).trim().split(/\s+/).filter(Boolean).length;
 }
 
 function speechWordCount(speech) {
@@ -1036,6 +1079,10 @@ function getSpeechById(id) {
   return state.speeches.find((speech) => speech.id === id) || null;
 }
 
+function getIdeaById(id) {
+  return state.ideas.find((idea) => idea.id === id) || null;
+}
+
 function getPlaybookById(id) {
   return state.playbookEntries.find((entry) => entry.id === id) || null;
 }
@@ -1080,6 +1127,34 @@ function getFilteredSpeeches() {
       speech.notes,
       ...speech.versions.map((version) => `${version.label} ${version.speechBody} ${version.revisionNote} ${version.rehearsalBullets.join(" ")}`),
       ...speech.deliveries.map((delivery) => `${delivery.location} ${delivery.city} ${delivery.program} ${delivery.eventLevel} ${delivery.speechStyle}`),
+    ].join(" ").toLowerCase();
+
+    return haystack.includes(query);
+  });
+}
+
+function getFilteredIdeas() {
+  const query = state.ideaSearch.trim().toLowerCase();
+
+  return state.ideas.filter((idea) => {
+    if (state.ideaFilter === "open" && idea.expandedSpeechId) {
+      return false;
+    }
+
+    if (state.ideaFilter === "expanded" && !idea.expandedSpeechId) {
+      return false;
+    }
+
+    if (!query) {
+      return true;
+    }
+
+    const linkedSpeech = idea.expandedSpeechId ? getSpeechById(idea.expandedSpeechId) : null;
+    const haystack = [
+      idea.title,
+      idea.idea,
+      idea.tags.join(" "),
+      linkedSpeech?.title || "",
     ].join(" ").toLowerCase();
 
     return haystack.includes(query);
@@ -1133,6 +1208,23 @@ function ensureSelection() {
   state.selectedDeliveryId = delivery?.id || null;
 
   return speech;
+}
+
+function ensureIdeaSelection() {
+  const filtered = getFilteredIdeas();
+
+  if (!filtered.length) {
+    state.selectedIdeaId = null;
+    return null;
+  }
+
+  let idea = getIdeaById(state.selectedIdeaId);
+  if (!idea || !filtered.some((item) => item.id === idea.id)) {
+    idea = filtered[0];
+    state.selectedIdeaId = idea.id;
+  }
+
+  return idea;
 }
 
 function ensurePlaybookSelection() {
@@ -1223,16 +1315,36 @@ function setLibraryStatus(text, tone = "") {
 }
 
 function renderTopActions() {
+  const showIdeas = state.workspaceView === "ideas";
+  const showSpeeches = state.workspaceView === "speeches";
   const showPlaybook = state.workspaceView === "playbook";
-  elements.workspaceToggleButton.hidden = !state.user;
-  elements.workspaceToggleButton.textContent = showPlaybook ? "Speech Library" : "Playbook";
-  elements.workspaceToggleButton.setAttribute("aria-pressed", String(showPlaybook));
+
+  elements.workspaceNav.hidden = !state.user;
+  elements.workspaceButtons.forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.workspaceSwitch === state.workspaceView));
+  });
   elements.newIdeaButton.hidden = showPlaybook || !state.user;
-  elements.newSpeechButton.hidden = showPlaybook || !state.user;
+  elements.newSpeechButton.hidden = !showSpeeches || !state.user;
   elements.newPlaybookButton.hidden = !showPlaybook || !state.user;
+
+  if (showIdeas) {
+    elements.newIdeaButton.className = "primary-button";
+  } else {
+    elements.newIdeaButton.className = "ghost-button";
+  }
 }
 
 function renderWorkspaceRail() {
+  if (state.workspaceView === "ideas") {
+    elements.libraryEyebrow.textContent = "Ideas";
+    elements.libraryTitle.textContent = "Idea Seeds";
+    if (elements.searchInput.value !== state.ideaSearch) {
+      elements.searchInput.value = state.ideaSearch;
+    }
+    elements.searchInput.placeholder = "Search ideas";
+    return;
+  }
+
   if (state.workspaceView === "playbook") {
     elements.libraryEyebrow.textContent = "Playbook";
     elements.libraryTitle.textContent = "Principles";
@@ -1260,6 +1372,17 @@ function playbookCategoryCount() {
 }
 
 function renderCounts() {
+  if (state.workspaceView === "ideas") {
+    const total = state.ideas.length;
+    const open = state.ideas.filter((idea) => !idea.expandedSpeechId).length;
+    const expanded = state.ideas.filter((idea) => idea.expandedSpeechId).length;
+
+    elements.totalCount.textContent = `${total} ${total === 1 ? "idea" : "ideas"}`;
+    elements.draftCount.textContent = `${open} open`;
+    elements.deliveredCount.textContent = `${expanded} expanded`;
+    return;
+  }
+
   if (state.workspaceView === "playbook") {
     const total = state.playbookEntries.length;
     const pinned = state.playbookEntries.filter((entry) => entry.pinned).length;
@@ -1281,6 +1404,26 @@ function renderCounts() {
 }
 
 function renderFilters() {
+  if (state.workspaceView === "ideas") {
+    const filters = [
+      { id: "all", label: "All" },
+      { id: "open", label: "Open" },
+      { id: "expanded", label: "Expanded" },
+    ];
+
+    elements.filterBar.innerHTML = filters.map((filter) => `
+      <button
+        class="filter-pill"
+        type="button"
+        data-filter="${filter.id}"
+        aria-pressed="${String(state.ideaFilter === filter.id)}"
+      >
+        ${filter.label}
+      </button>
+    `).join("");
+    return;
+  }
+
   if (state.workspaceView === "playbook") {
     const filters = [
       { id: "all", label: "All" },
@@ -1302,7 +1445,7 @@ function renderFilters() {
 
   const filters = [
     { id: "all", label: "All" },
-    { id: "idea", label: "Ideas" },
+    { id: "idea", label: "Legacy Ideas" },
     { id: "draft", label: "Drafts" },
     { id: "rehearsal_ready", label: "Rehearsal Ready" },
     { id: "delivered", label: "Delivered" },
@@ -1318,6 +1461,184 @@ function renderFilters() {
       ${filter.label}
     </button>
   `).join("");
+}
+
+function renderIdeaBody(idea) {
+  if (!idea) {
+    return `
+      <div class="empty-state">
+        Capture sparks, fragments, and little thoughts here before they become full speeches.
+      </div>
+    `;
+  }
+
+  const linkedSpeech = idea.expandedSpeechId ? getSpeechById(idea.expandedSpeechId) : null;
+  const updatedLabel = idea.updatedAt ? `Last edited ${formatDateTime(idea.updatedAt)}` : "Not edited yet";
+
+  return `
+    <div class="reader-stack">
+      <div class="card">
+        <div class="panel-head">
+          <h4>Idea Note</h4>
+          <div class="button-row">
+            <span class="meta-chip">${updatedLabel}</span>
+            <span class="meta-chip">${ideaWordCount(idea)} words</span>
+          </div>
+        </div>
+        <div class="notes-box">
+          ${renderScriptBodyText(idea.idea, "No idea note yet.")}
+        </div>
+      </div>
+
+      <div class="two-up">
+        <div class="card">
+          <div class="panel-head">
+            <h4>Expansion Status</h4>
+            <span class="meta-chip">${linkedSpeech ? "Expanded" : "Open"}</span>
+          </div>
+          <div class="info-grid">
+            <div class="info-row">
+              <strong>Linked Speech</strong>
+              <span>${displayText(linkedSpeech?.title || "Not expanded yet.")}</span>
+            </div>
+            <div class="info-row">
+              <strong>Created</strong>
+              <span>${displayText(formatDateTime(idea.createdAt || idea.updatedAt || ""))}</span>
+            </div>
+            <div class="info-row">
+              <strong>Tags</strong>
+              <div class="tag-row">${idea.tags.length ? renderTagChips(idea.tags) : '<span>No tags yet.</span>'}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="panel-head">
+            <h4>How To Use It</h4>
+            <span class="meta-chip">Lightweight capture</span>
+          </div>
+          <div class="notes-box">
+            <p class="body-copy">${linkedSpeech
+              ? "This idea already has a linked speech. Keep the seed if you want the original spark preserved beside the full draft."
+              : "Keep this short and vivid. Expand it into a speech only when you are ready to structure the draft, versions, rehearsal, and runs."}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderIdeaDetail(idea) {
+  elements.tabBar.hidden = true;
+
+  if (!idea) {
+    elements.speechMode.textContent = "Idea";
+    elements.speechTitle.textContent = state.ideas.length ? "No matching idea" : "Capture an idea";
+    elements.speechStatusChip.textContent = "Idea";
+    elements.speechStatusChip.dataset.status = "idea";
+    elements.speechGoalChip.textContent = "Seed";
+    elements.speechCountChip.textContent = `${state.ideas.length} ${state.ideas.length === 1 ? "idea" : "ideas"}`;
+    elements.speechIdea.textContent = state.ideas.length
+      ? "Adjust the search or filter to see an idea."
+      : "Save the small sparks you might want to turn into full speeches later.";
+    elements.speechTags.innerHTML = "";
+    elements.detailActionRow.innerHTML = `
+      <button class="primary-button" type="button" data-action="new-idea">New Idea</button>
+      <button class="ghost-button" type="button" data-action="show-speeches">Speech Library</button>
+    `;
+    elements.focusCard.innerHTML = `
+      <div class="focus-block" data-size="wide">
+        <strong>What Belongs Here</strong>
+        <p>Store little thoughts, scenes, openings, tensions, or emotional arcs before they deserve full speech structure.</p>
+      </div>
+      <div class="focus-block">
+        <strong>Expansion Flow</strong>
+        <p>Capture first, expand later.</p>
+        <span class="helper-copy">Ideas stay lightweight until you deliberately turn one into a speech.</span>
+      </div>
+    `;
+    elements.tabContent.innerHTML = `
+      <div class="empty-state">
+        ${state.ideas.length ? "No ideas match the current search." : "No idea seeds yet. Start with the next thought you do not want to lose."}
+      </div>
+    `;
+    syncHeaderActions();
+    return;
+  }
+
+  const linkedSpeech = idea.expandedSpeechId ? getSpeechById(idea.expandedSpeechId) : null;
+
+  elements.speechMode.textContent = linkedSpeech ? "Idea + Linked Speech" : "Idea Seed";
+  elements.speechTitle.textContent = idea.title;
+  elements.speechStatusChip.textContent = linkedSpeech ? "Expanded" : "Idea";
+  elements.speechStatusChip.dataset.status = linkedSpeech ? "expanded" : "idea";
+  elements.speechGoalChip.textContent = linkedSpeech ? "Linked to speech" : "Open seed";
+  elements.speechCountChip.textContent = `${idea.tags.length} ${idea.tags.length === 1 ? "tag" : "tags"}`;
+  elements.speechIdea.textContent = excerpt(idea.idea, 240) || "No idea note yet.";
+  elements.speechTags.innerHTML = renderTagChips(idea.tags);
+  elements.detailActionRow.innerHTML = `
+    <button class="meta-button" type="button" data-action="edit-idea">Edit Idea</button>
+    <button class="primary-button" type="button" data-action="${linkedSpeech ? "open-linked-speech" : "expand-idea"}">${linkedSpeech ? "Open Speech" : "Expand to Speech"}</button>
+    <button class="danger-button" type="button" data-action="delete-idea">Delete Idea</button>
+  `;
+  elements.focusCard.innerHTML = `
+    <div class="focus-block" data-size="wide">
+      <strong>Seed</strong>
+      <p>${displayText(excerpt(idea.idea, 220), "No idea note yet.")}</p>
+      <span class="helper-copy">${displayText(idea.updatedAt ? `Last edited ${formatDateTime(idea.updatedAt)}` : "Not edited yet.")}</span>
+    </div>
+    <div class="focus-block">
+      <strong>Expansion</strong>
+      <p>${linkedSpeech ? displayText(linkedSpeech.title) : "Not expanded yet"}</p>
+      <span class="helper-copy">${linkedSpeech ? "This idea already has a linked speech." : "Turn it into a speech when you are ready for drafts and rehearsal."}</span>
+    </div>
+  `;
+  elements.tabContent.innerHTML = renderIdeaBody(idea);
+  syncHeaderActions();
+}
+
+function renderIdeaList() {
+  const filtered = getFilteredIdeas();
+  const selected = ensureIdeaSelection();
+
+  if (!filtered.length) {
+    elements.speechList.innerHTML = `<div class="empty-state">${state.ideas.length ? "No ideas match this filter." : "No ideas saved yet."}</div>`;
+    setLibraryStatus(
+      state.ideas.length
+        ? (state.ideaSearch ? `Filtering ideas by "${state.ideaSearch.trim()}".` : "No ideas match this filter.")
+        : "Start an idea seed the moment a promising thought appears.",
+      state.ideas.length ? "" : "ok",
+    );
+    renderIdeaDetail(null);
+    return;
+  }
+
+  elements.speechList.innerHTML = filtered.map((idea) => {
+    const linkedSpeech = idea.expandedSpeechId ? getSpeechById(idea.expandedSpeechId) : null;
+
+    return `
+      <button class="speech-card" type="button" data-idea-id="${idea.id}" aria-pressed="${String(selected?.id === idea.id)}">
+        <div class="meta-row">
+          <span class="status-chip" data-status="${linkedSpeech ? "expanded" : "idea"}">${linkedSpeech ? "Expanded" : "Idea"}</span>
+          <span class="meta-chip">${ideaWordCount(idea)} words</span>
+        </div>
+        <h3>${displayText(idea.title)}</h3>
+        <p>${displayText(excerpt(idea.idea, 140), "No idea note yet.")}</p>
+        <div class="tag-row">
+          ${renderTagChips(idea.tags.slice(0, 3))}
+        </div>
+        <p>${displayText(linkedSpeech ? `Linked to ${linkedSpeech.title}` : (idea.updatedAt ? `Last edited ${formatDateTime(idea.updatedAt)}` : "Not edited yet."))}</p>
+      </button>
+    `;
+  }).join("");
+
+  setLibraryStatus(
+    state.ideaSearch
+      ? `Filtering ideas by "${state.ideaSearch.trim()}".`
+      : "Showing lightweight idea seeds for later expansion.",
+    "ok",
+  );
+  renderIdeaDetail(selected);
 }
 
 function renderPlaybookBody(entry) {
@@ -1401,7 +1722,7 @@ function renderPlaybookDetail(entry) {
     elements.speechTags.innerHTML = "";
     elements.detailActionRow.innerHTML = `
       <button class="primary-button" type="button" data-action="new-playbook">New Principle</button>
-      <button class="ghost-button" type="button" data-action="toggle-workspace-view">Speech Library</button>
+      <button class="ghost-button" type="button" data-action="show-speeches">Speech Library</button>
     `;
     elements.focusCard.innerHTML = `
       <div class="focus-block" data-size="wide">
@@ -2128,7 +2449,7 @@ function setEditorBusy(isBusy, busyLabel = "Saving...") {
   setSaveButtonLabel(elements.saveEditorButton.dataset.defaultLabel || elements.saveEditorButton.textContent);
 }
 
-function openSpeechEditor({ speechId = null, statusPreset = "draft" } = {}) {
+function openSpeechEditor({ speechId = null, statusPreset = "draft", sourceIdeaId = null } = {}) {
   state.editor = {
     open: true,
     kind: "speech",
@@ -2136,10 +2457,36 @@ function openSpeechEditor({ speechId = null, statusPreset = "draft" } = {}) {
     speechId,
     versionId: null,
     deliveryId: null,
+    ideaId: null,
     playbookId: null,
     statusPreset,
     sourceVersionId: null,
+    sourceIdeaId: sourceIdeaId || null,
   };
+
+  renderEditor();
+}
+
+function openIdeaEditor({ ideaId = null } = {}) {
+  const entry = ideaId ? getIdeaById(ideaId) : ensureIdeaSelection();
+
+  state.editor = {
+    open: true,
+    kind: "idea",
+    intent: ideaId ? "edit" : "create",
+    speechId: null,
+    versionId: null,
+    deliveryId: null,
+    ideaId: ideaId || null,
+    playbookId: null,
+    statusPreset: "draft",
+    sourceVersionId: null,
+    sourceIdeaId: null,
+  };
+
+  if (!ideaId && entry?.id) {
+    state.selectedIdeaId = entry.id;
+  }
 
   renderEditor();
 }
@@ -2159,9 +2506,11 @@ function openVersionEditor({ speechId = null, versionId = null } = {}) {
     speechId: speech.id,
     versionId: versionId || null,
     deliveryId: null,
+    ideaId: null,
     playbookId: null,
     statusPreset: speech.status,
     sourceVersionId: selectedVersion?.id || null,
+    sourceIdeaId: null,
   };
 
   renderEditor();
@@ -2182,9 +2531,11 @@ function openDeliveryEditor({ speechId = null, deliveryId = null } = {}) {
     speechId: speech.id,
     versionId: selectedDelivery?.versionId || getSelectedVersionForSpeech(speech)?.id || null,
     deliveryId: deliveryId || null,
+    ideaId: null,
     playbookId: null,
     statusPreset: speech.status,
     sourceVersionId: null,
+    sourceIdeaId: null,
   };
 
   renderEditor();
@@ -2200,9 +2551,11 @@ function openPlaybookEditor({ playbookId = null } = {}) {
     speechId: null,
     versionId: null,
     deliveryId: null,
+    ideaId: null,
     playbookId: playbookId || null,
     statusPreset: "draft",
     sourceVersionId: null,
+    sourceIdeaId: null,
   };
 
   if (!playbookId && entry?.id) {
@@ -2221,9 +2574,11 @@ function closeEditor() {
     speechId: null,
     versionId: null,
     deliveryId: null,
+    ideaId: null,
     playbookId: null,
     statusPreset: "draft",
     sourceVersionId: null,
+    sourceIdeaId: null,
   };
 
   elements.editorShell.dataset.layout = "";
@@ -2448,9 +2803,19 @@ function versionOptions(speech, selectedValue, includeBlank = false, excludeId =
 
 function speechEditorConfig(speech) {
   const isEdit = state.editor.intent === "edit";
+  const sourceIdea = !isEdit && state.editor.sourceIdeaId ? getIdeaById(state.editor.sourceIdeaId) : null;
   const activeVersion = getSelectedVersionForSpeech(speech);
   const statusValue = isEdit ? speech.status : state.editor.statusPreset;
   const versionLabel = isEdit ? "" : defaultVersionLabel(statusValue);
+  const initialTitle = isEdit ? speech.title : (sourceIdea?.title || "");
+  const initialGoal = isEdit ? speech.goal : "";
+  const initialTags = isEdit ? speech.tags.join(", ") : (sourceIdea?.tags.join(", ") || "");
+  const initialCoreIdea = isEdit ? speech.coreIdea : (sourceIdea?.idea || "");
+  const initialNotes = isEdit ? speech.notes : "";
+  const initialMinutes = statusValue === "idea" ? "" : "5";
+  const initialRevisionNote = sourceIdea
+    ? "Expand the seed into a first full draft without losing the original spark."
+    : (statusValue === "idea" ? "Capture the exact scene before writing the speech body." : "Build the first full pass, then tighten the opening and ending.");
   const footer = isEdit
     ? "Metadata and direction save here. Script and bullets live in Edit Script."
     : "Creating a speech also creates the first version so you can start writing immediately.";
@@ -2458,15 +2823,32 @@ function speechEditorConfig(speech) {
   return {
     layout: "studio",
     modeLabel: isEdit ? "Edit Meta" : "New Speech",
-    title: isEdit ? speech.title : (statusValue === "idea" ? "New Idea" : "New Speech"),
+    title: isEdit ? speech.title : (sourceIdea ? `New Speech from ${sourceIdea.title}` : (statusValue === "idea" ? "New Idea" : "New Speech")),
     context: isEdit
       ? `${speech.versions.length} versions · ${speech.deliveries.length} runs`
-      : (statusValue === "idea" ? "Capture the speech before it becomes a draft." : "Start a new speech with the first version already attached."),
+      : (sourceIdea
+        ? "Start a real speech from this lightweight idea seed."
+        : (statusValue === "idea" ? "Capture the speech before it becomes a draft." : "Start a new speech with the first version already attached.")),
     footer,
     dismissLabel: "Back to Workspace",
     saveLabel: isEdit ? "Save Speech" : "Create Speech",
     fields: `
       <div class="studio-layout">
+        ${sourceIdea ? `
+          <div class="editor-card">
+            <div class="editor-card-head">
+              <div>
+                <h3>Source Idea</h3>
+                <p class="editor-card-copy">This seed stays lightweight in Ideas while you turn it into a full speech here.</p>
+              </div>
+              <span class="meta-chip">${ideaWordCount(sourceIdea)} words</span>
+            </div>
+            <div class="notes-box">
+              ${renderScriptBodyText(sourceIdea.idea, "No source idea note yet.")}
+            </div>
+          </div>
+        ` : ""}
+
         <div class="editor-card">
           <div class="editor-card-head">
             <div>
@@ -2478,7 +2860,7 @@ function speechEditorConfig(speech) {
           <div class="editor-grid">
             <div class="field">
               <label for="speechTitleInput">Title</label>
-              <input id="speechTitleInput" name="title" type="text" value="${escapeHtml(isEdit ? speech.title : "")}" required>
+              <input id="speechTitleInput" name="title" type="text" value="${escapeHtml(initialTitle)}" required>
             </div>
             <div class="field">
               <label for="speechStatusSelect">Status</label>
@@ -2488,11 +2870,11 @@ function speechEditorConfig(speech) {
             </div>
             <div class="field" data-span="full">
               <label for="speechGoalInput">Goal</label>
-              <input id="speechGoalInput" name="goal" type="text" value="${escapeHtml(isEdit ? speech.goal : "")}">
+              <input id="speechGoalInput" name="goal" type="text" value="${escapeHtml(initialGoal)}">
             </div>
             <div class="field" data-span="full">
               <label for="speechTagsInput">Tags</label>
-              <input id="speechTagsInput" name="tags" type="text" value="${escapeHtml(isEdit ? speech.tags.join(", ") : "")}">
+              <input id="speechTagsInput" name="tags" type="text" value="${escapeHtml(initialTags)}">
             </div>
             ${isEdit ? `
               <div class="field" data-span="full">
@@ -2516,11 +2898,11 @@ function speechEditorConfig(speech) {
           <div class="editor-grid">
             <div class="field" data-span="full">
               <label for="speechIdeaInput">Core Idea</label>
-              <textarea id="speechIdeaInput" name="coreIdea" data-compact="true">${escapeHtml(isEdit ? speech.coreIdea : "")}</textarea>
+              <textarea id="speechIdeaInput" name="coreIdea" data-compact="true">${escapeHtml(initialCoreIdea)}</textarea>
             </div>
             <div class="field" data-span="full">
               <label for="speechNotesInput">Next Move</label>
-              <textarea id="speechNotesInput" name="notes" data-compact="true">${escapeHtml(isEdit ? speech.notes : "")}</textarea>
+              <textarea id="speechNotesInput" name="notes" data-compact="true">${escapeHtml(initialNotes)}</textarea>
             </div>
           </div>
         </div>
@@ -2540,11 +2922,11 @@ function speechEditorConfig(speech) {
               </div>
               <div class="field">
                 <label for="estimatedMinutesInput">Target Minutes</label>
-                <input id="estimatedMinutesInput" name="estimatedMinutes" type="number" min="0" step="1" value="${statusValue === "idea" ? "" : "5"}">
+                <input id="estimatedMinutesInput" name="estimatedMinutes" type="number" min="0" step="1" value="${initialMinutes}">
               </div>
               <div class="field" data-span="full">
                 <label for="revisionNoteInput">Revision Note</label>
-                <textarea id="revisionNoteInput" name="revisionNote" data-compact="true">${escapeHtml(statusValue === "idea" ? "Capture the exact scene before writing the speech body." : "Build the first full pass, then tighten the opening and ending.")}</textarea>
+                <textarea id="revisionNoteInput" name="revisionNote" data-compact="true">${escapeHtml(initialRevisionNote)}</textarea>
               </div>
             </div>
           </div>
@@ -2739,6 +3121,60 @@ function deliveryEditorConfig(speech, delivery) {
   };
 }
 
+function ideaEditorConfig(entry) {
+  const isEdit = state.editor.intent === "edit";
+  const linkedSpeech = entry?.expandedSpeechId ? getSpeechById(entry.expandedSpeechId) : null;
+
+  return {
+    layout: "drawer",
+    modeLabel: isEdit ? "Edit Idea" : "New Idea",
+    title: isEdit ? entry.title : "New Idea",
+    context: isEdit
+      ? (linkedSpeech ? `Linked to ${linkedSpeech.title} · Last edited ${formatDateTime(entry.updatedAt)}` : `Last edited ${formatDateTime(entry.updatedAt)}`)
+      : "Capture the idea before it turns into a full speech.",
+    footer: linkedSpeech
+      ? "This stays a lightweight seed even after you expand it into a speech."
+      : "Keep this small. Expand it into a speech only when you are ready for versions, rehearsal, and runs.",
+    dismissLabel: "Back to Workspace",
+    saveLabel: isEdit ? "Save Idea" : "Create Idea",
+    fields: `
+      <div class="editor-card">
+        <div class="editor-card-head">
+          <div>
+            <h3>Idea Settings</h3>
+            <p class="editor-card-copy">Name the seed and tag it so you can find it later.</p>
+          </div>
+          ${isEdit ? `<span class="meta-chip">${linkedSpeech ? "Expanded" : "Open"}</span>` : ""}
+        </div>
+        <div class="editor-grid">
+          <div class="field">
+            <label for="ideaTitleInput">Title</label>
+            <input id="ideaTitleInput" name="title" type="text" value="${escapeHtml(entry?.title || "")}" required>
+          </div>
+          <div class="field">
+            <label for="ideaTagsInput">Tags</label>
+            <input id="ideaTagsInput" name="tags" type="text" value="${escapeHtml((entry?.tags || []).join(", "))}">
+          </div>
+        </div>
+      </div>
+
+      <div class="editor-card">
+        <div class="editor-card-head">
+          <div>
+            <h3>Idea Note</h3>
+            <p class="editor-card-copy">Store the thought exactly as you want to encounter it later.</p>
+          </div>
+          ${isEdit ? `<span class="meta-chip">${ideaWordCount(entry)} words</span>` : ""}
+        </div>
+        <div class="field">
+          <label for="ideaBodyInput">Idea</label>
+          <textarea id="ideaBodyInput" name="idea" data-rich="true">${escapeHtml(entry?.idea || "")}</textarea>
+        </div>
+      </div>
+    `,
+  };
+}
+
 function yesNoOptions(selectedValue) {
   return renderOptions([
     { value: "true", label: "Pinned in writing" },
@@ -2811,6 +3247,7 @@ function playbookEditorConfig(entry) {
 }
 
 function renderEditor() {
+  const ideaEntry = getIdeaById(state.editor.ideaId);
   const speech = getSpeechById(state.editor.speechId);
   const version = speech
     ? getVersionById(speech, state.editor.versionId || state.editor.sourceVersionId)
@@ -2820,7 +3257,9 @@ function renderEditor() {
 
   let config = null;
 
-  if (state.editor.kind === "speech" && (state.editor.intent === "create" || speech)) {
+  if (state.editor.kind === "idea" && (state.editor.intent === "create" || ideaEntry)) {
+    config = ideaEditorConfig(ideaEntry);
+  } else if (state.editor.kind === "speech" && (state.editor.intent === "create" || speech)) {
     config = speechEditorConfig(speech);
   } else if (state.editor.kind === "version" && speech && (state.editor.intent === "create" || version)) {
     config = versionEditorConfig(speech, version);
@@ -2854,13 +3293,14 @@ function renderEditor() {
   syncScriptParagraphSpacingControls(elements.editorShell);
   scheduleAutoSizeRichTextareas(elements.editorShell);
 
+  const showIdeaDelete = state.editor.kind === "idea" && state.editor.intent === "edit" && Boolean(ideaEntry);
   const showSpeechDelete = state.editor.kind === "speech" && state.editor.intent === "edit" && Boolean(speech);
   const showPlaybookDelete = state.editor.kind === "playbook" && state.editor.intent === "edit" && Boolean(playbookEntry);
   const showScriptCopy = state.editor.kind === "version";
-  elements.deleteEditorButton.hidden = !(showSpeechDelete || showPlaybookDelete);
+  elements.deleteEditorButton.hidden = !(showIdeaDelete || showSpeechDelete || showPlaybookDelete);
   elements.deleteEditorButton.textContent = showPlaybookDelete
     ? "Delete Principle"
-    : (speech?.status === "idea" ? "Delete Idea" : "Delete Speech");
+    : (showIdeaDelete ? "Delete Idea" : (speech?.status === "idea" ? "Delete Idea" : "Delete Speech"));
   elements.copyEditorButton.hidden = !showScriptCopy;
   elements.copyEditorButton.textContent = "Copy Speech";
 
@@ -2894,6 +3334,62 @@ async function copyEditorSpeechBody() {
   } finally {
     elements.copyEditorButton.disabled = false;
     elements.copyEditorButton.textContent = originalLabel;
+  }
+}
+
+async function saveIdea(formData) {
+  const isEdit = state.editor.intent === "edit";
+  const title = cleanText(formData.get("title"));
+  const idea = multilineText(formData.get("idea"));
+
+  if (!title) {
+    setEditorStatus("Title is required.", "error");
+    return;
+  }
+
+  if (!idea) {
+    setEditorStatus("Idea text is required.", "error");
+    return;
+  }
+
+  const payload = {
+    title,
+    idea,
+    tags: parseTagList(formData.get("tags")),
+  };
+
+  try {
+    let savedIdeaId = state.editor.ideaId;
+
+    if (isEdit) {
+      const entry = getIdeaById(state.editor.ideaId);
+      if (!entry) return;
+
+      const { error } = await db
+        .from("brajesh_speech_ideas")
+        .update(payload)
+        .eq("id", entry.id);
+
+      if (error) throw error;
+      savedIdeaId = entry.id;
+    } else {
+      const { data, error } = await db
+        .from("brajesh_speech_ideas")
+        .insert(payload)
+        .select("id")
+        .single();
+
+      if (error) throw error;
+      savedIdeaId = data.id;
+    }
+
+    state.selectedIdeaId = savedIdeaId;
+    state.workspaceView = "ideas";
+    closeEditor();
+    await loadSpeeches({ silent: true });
+    setPageStatus(isEdit ? "Idea saved." : "Idea created.", "ok");
+  } catch (error) {
+    reportEditorError(error.message || "Could not save that idea.");
   }
 }
 
@@ -2974,6 +3470,16 @@ async function saveSpeech(formData) {
 
       if (updateSpeechError) throw updateSpeechError;
 
+      if (state.editor.sourceIdeaId) {
+        const { error: linkIdeaError } = await db
+          .from("brajesh_speech_ideas")
+          .update({ expanded_speech_id: speechRow.id })
+          .eq("id", state.editor.sourceIdeaId);
+
+        if (linkIdeaError) throw linkIdeaError;
+      }
+
+      state.workspaceView = "speeches";
       state.selectedSpeechId = speechRow.id;
       state.selectedVersionId = versionRow.id;
       state.selectedDeliveryId = null;
@@ -3202,6 +3708,8 @@ async function saveEditor(event) {
     ? (state.editor.intent === "edit" ? "Saving Run..." : "Logging Run...")
     : state.editor.kind === "version"
       ? (state.editor.intent === "edit" ? "Saving Script..." : "Creating Version...")
+      : state.editor.kind === "idea"
+        ? (state.editor.intent === "edit" ? "Saving Idea..." : "Creating Idea...")
       : state.editor.kind === "playbook"
         ? (state.editor.intent === "edit" ? "Saving Principle..." : "Creating Principle...")
       : (state.editor.intent === "edit" ? "Saving Speech..." : "Creating Speech...");
@@ -3210,6 +3718,11 @@ async function saveEditor(event) {
   setEditorStatus(busyLabel, "ok");
 
   try {
+    if (state.editor.kind === "idea") {
+      await saveIdea(formData);
+      return;
+    }
+
     if (state.editor.kind === "speech") {
       await saveSpeech(formData);
       return;
@@ -3232,6 +3745,52 @@ async function saveEditor(event) {
     if (!elements.editorShell.hidden) {
       setEditorBusy(false);
     }
+  }
+}
+
+async function deleteIdeaEntry(ideaId = state.editor.ideaId || state.selectedIdeaId) {
+  const idea = getIdeaById(ideaId);
+  if (!idea || ideaDeleteBusy) {
+    return;
+  }
+
+  const linkedSpeech = idea.expandedSpeechId ? getSpeechById(idea.expandedSpeechId) : null;
+  const confirmed = window.confirm(
+    linkedSpeech
+      ? `Delete "${idea.title}"?\n\nThis removes the lightweight idea seed, but keeps the linked speech "${linkedSpeech.title}".`
+      : `Delete "${idea.title}"?\n\nThis permanently removes the idea seed from the workspace.`,
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  ideaDeleteBusy = true;
+  setPageStatus(`Deleting "${idea.title}"...`);
+
+  try {
+    const { error } = await db
+      .from("brajesh_speech_ideas")
+      .delete()
+      .eq("id", idea.id);
+
+    if (error) throw error;
+
+    if (state.editor.ideaId === idea.id) {
+      closeEditor();
+    }
+
+    if (state.selectedIdeaId === idea.id) {
+      state.selectedIdeaId = null;
+    }
+
+    state.workspaceView = "ideas";
+    await loadSpeeches({ silent: true });
+    setPageStatus(`Deleted "${idea.title}".`, "ok");
+  } catch (error) {
+    setPageStatus(error.message || `Could not delete "${idea.title}".`, "error");
+  } finally {
+    ideaDeleteBusy = false;
   }
 }
 
@@ -3464,16 +4023,69 @@ function renderRehearsalScreen() {
 }
 
 function runAction(action) {
+  const idea = ensureIdeaSelection();
   const speech = ensureSelection();
   const playbookEntry = ensurePlaybookSelection();
 
   if (action === "new-idea") {
-    openSpeechEditor({ statusPreset: "idea" });
+    state.workspaceView = "ideas";
+    openIdeaEditor();
     return;
   }
 
   if (action === "new-speech") {
+    state.workspaceView = "speeches";
     openSpeechEditor({ statusPreset: "draft" });
+    return;
+  }
+
+  if (action === "show-ideas") {
+    state.workspaceView = "ideas";
+    renderApp();
+    return;
+  }
+
+  if (action === "show-speeches") {
+    state.workspaceView = "speeches";
+    renderApp();
+    return;
+  }
+
+  if (action === "show-playbook") {
+    state.workspaceView = "playbook";
+    renderApp();
+    return;
+  }
+
+  if (action === "edit-idea" && idea) {
+    state.workspaceView = "ideas";
+    openIdeaEditor({ ideaId: idea.id });
+    return;
+  }
+
+  if (action === "expand-idea" && idea) {
+    openSpeechEditor({ statusPreset: "draft", sourceIdeaId: idea.id });
+    return;
+  }
+
+  if (action === "open-linked-speech" && idea?.expandedSpeechId) {
+    const linkedSpeech = getSpeechById(idea.expandedSpeechId);
+    if (!linkedSpeech) {
+      setPageStatus("The linked speech could not be found.", "error");
+      return;
+    }
+
+    state.workspaceView = "speeches";
+    state.selectedSpeechId = linkedSpeech.id;
+    state.selectedVersionId = null;
+    state.selectedDeliveryId = null;
+    renderApp();
+    return;
+  }
+
+  if (action === "delete-idea" && idea) {
+    state.workspaceView = "ideas";
+    deleteIdeaEntry(idea.id);
     return;
   }
 
@@ -3492,12 +4104,6 @@ function runAction(action) {
 
   if (action === "new-version" && speech) {
     openVersionEditor({ speechId: speech.id });
-    return;
-  }
-
-  if (action === "toggle-workspace-view") {
-    state.workspaceView = state.workspaceView === "playbook" ? "speeches" : "playbook";
-    renderApp();
     return;
   }
 
@@ -3595,7 +4201,9 @@ function renderApp() {
   renderWorkspaceRail();
   renderCounts();
   renderFilters();
-  if (state.workspaceView === "playbook") {
+  if (state.workspaceView === "ideas") {
+    renderIdeaList();
+  } else if (state.workspaceView === "playbook") {
     renderPlaybookList();
   } else {
     renderSpeechList();
@@ -3629,12 +4237,17 @@ elements.logoutButton.addEventListener("click", () => {
   handleSignOut();
 });
 
-elements.workspaceToggleButton.addEventListener("click", () => {
-  runAction("toggle-workspace-view");
+elements.workspaceNav.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-workspace-switch]");
+  if (!button) return;
+
+  runAction(`show-${button.dataset.workspaceSwitch}`);
 });
 
 elements.searchInput.addEventListener("input", () => {
-  if (state.workspaceView === "playbook") {
+  if (state.workspaceView === "ideas") {
+    state.ideaSearch = elements.searchInput.value;
+  } else if (state.workspaceView === "playbook") {
     state.playbookSearch = elements.searchInput.value;
   } else {
     state.search = elements.searchInput.value;
@@ -3646,7 +4259,9 @@ elements.filterBar.addEventListener("click", (event) => {
   const button = event.target.closest("[data-filter]");
   if (!button) return;
 
-  if (state.workspaceView === "playbook") {
+  if (state.workspaceView === "ideas") {
+    state.ideaFilter = button.dataset.filter;
+  } else if (state.workspaceView === "playbook") {
     state.playbookFilter = button.dataset.filter;
   } else {
     state.filter = button.dataset.filter;
@@ -3667,6 +4282,15 @@ elements.newPlaybookButton.addEventListener("click", () => {
 });
 
 elements.speechList.addEventListener("click", (event) => {
+  if (state.workspaceView === "ideas") {
+    const button = event.target.closest("[data-idea-id]");
+    if (!button) return;
+
+    state.selectedIdeaId = button.dataset.ideaId;
+    renderApp();
+    return;
+  }
+
   if (state.workspaceView === "playbook") {
     const button = event.target.closest("[data-playbook-id]");
     if (!button) return;
@@ -3768,6 +4392,10 @@ elements.cancelEditorButton.addEventListener("click", () => {
 
 elements.deleteEditorButton.addEventListener("click", () => {
   if (editorBusy) return;
+  if (state.editor.kind === "idea") {
+    deleteIdeaEntry(state.editor.ideaId);
+    return;
+  }
   if (state.editor.kind === "playbook") {
     deletePlaybookEntry(state.editor.playbookId);
     return;

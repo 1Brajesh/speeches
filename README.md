@@ -45,6 +45,9 @@ Local context note for sessions started in the standalone `speeches` repo.
 
 ## Data Model
 
+- `brajesh_speech_ideas`
+  - lightweight idea seeds for later expansion
+  - title, idea note, tags, optional linked speech
 - `brajesh_speeches`
   - parent speech record
   - title, status, goal, core idea, tags, notes, active version
@@ -60,7 +63,8 @@ Local context note for sessions started in the standalone `speeches` repo.
 
 ## Main UI Areas
 
-- library with search and status filters
+- top-level ideas workspace for lightweight seed capture
+- speech library with search and status filters
 - top-level playbook workspace for reusable principles
 - overview tab
 - versions tab
@@ -69,6 +73,9 @@ Local context note for sessions started in the standalone `speeches` repo.
 
 ## Important Behavior
 
+- `New Idea` no longer creates a speech or version record.
+- ideas are saved separately from speeches and can later be expanded into a real speech.
+- expanding an idea opens the normal speech-creation studio prefilled from that idea and links the idea to the created speech on save.
 - Creating a new speech also creates its first version.
 - Saving a version updates the speech's `active_version_id`.
 - The selected version can be deleted from `Versions`, but each speech keeps at least one version.
@@ -85,6 +92,9 @@ Local context note for sessions started in the standalone `speeches` repo.
 ## Recent UI State
 
 - As of 2026-05-10:
+  - `Ideas`, `Speeches`, and `Playbook` are separate top-level workspace views.
+  - `Ideas` stores lightweight idea seeds instead of creating speech/version records up front.
+  - idea seeds can be edited, deleted, searched, filtered by open vs expanded, and expanded into speeches later.
   - `Playbook` is a separate top-level workspace view, not a speech tab.
   - `Playbook` entries can be created, edited, deleted, tagged, categorized, and pinned.
   - pinned `Playbook` principles appear in the script-writing editors as drafting guidance.
@@ -121,7 +131,7 @@ Local context note for sessions started in the standalone `speeches` repo.
 
 - Important: when speeches UI changes appear not to register after deploy, check for stale cached JS.
 - The speeches page currently cache-busts the module URL in `index.html`:
-  - `./assets/js/brajesh-speeches.js?v=20260510l`
+  - `./assets/js/brajesh-speeches.js?v=20260510m`
 - If future speeches JS changes appear missing in production, bump that query-string version.
 
 ## Useful Starting Point

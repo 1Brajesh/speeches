@@ -149,6 +149,7 @@
     }
 
     .top-actions,
+    .workspace-nav,
     .pill-row,
     .meta-row,
     .tag-row,
@@ -205,6 +206,7 @@
       box-shadow: 0 12px 26px rgba(0, 0, 0, 0.18);
     }
 
+    .nav-pill[aria-pressed="true"],
     .filter-pill[aria-pressed="true"],
     .tab-pill[aria-pressed="true"] {
       background: rgba(123, 183, 255, 0.1);
@@ -439,6 +441,12 @@
       color: var(--gold);
       border-color: rgba(242, 200, 118, 0.26);
       background: rgba(242, 200, 118, 0.08);
+    }
+
+    .status-chip[data-status="expanded"] {
+      color: var(--green);
+      border-color: rgba(138, 208, 166, 0.28);
+      background: rgba(138, 208, 166, 0.1);
     }
 
     .status-chip[data-status="pinned"] {
@@ -1488,7 +1496,11 @@
       </div>
       <div class="top-actions">
         <span class="identity-text" id="adminIdentity"></span>
-        <button class="ghost-button" type="button" id="workspaceToggleButton" hidden>Playbook</button>
+        <div class="workspace-nav" id="workspaceNav" hidden>
+          <button class="nav-pill" type="button" data-workspace-switch="ideas" aria-pressed="false">Ideas</button>
+          <button class="nav-pill" type="button" data-workspace-switch="speeches" aria-pressed="true">Speeches</button>
+          <button class="nav-pill" type="button" data-workspace-switch="playbook" aria-pressed="false">Playbook</button>
+        </div>
         <button class="ghost-button" type="button" id="newIdeaButton" hidden>New Idea</button>
         <button class="primary-button" type="button" id="newSpeechButton" hidden>New Speech</button>
         <button class="primary-button" type="button" id="newPlaybookButton" hidden>New Principle</button>
@@ -1635,6 +1647,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260510l"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260510m"></script>
 </body>
 </html>
