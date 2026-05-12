@@ -66,6 +66,7 @@ const state = {
     statusPreset: "draft",
     sourceVersionId: null,
     sourceIdeaId: null,
+    entryPoint: null,
   },
 };
 let pageLoadPromise = null;
@@ -2407,7 +2408,7 @@ function renderRehearsalTab(speech) {
           <h4>${rightTitle}</h4>
           <div class="button-row">
             <span class="meta-chip">${version?.label || "No version"}</span>
-            <button class="script-button" type="button" data-action="edit-version">${speech.status === "idea" ? "Edit Note" : "Edit Bullets"}</button>
+            <button class="script-button" type="button" data-action="edit-version-bullets">${speech.status === "idea" ? "Edit Note" : "Edit Bullets"}</button>
           </div>
         </div>
         <div class="info-grid" style="margin-bottom: 16px;">
@@ -2435,6 +2436,27 @@ function renderRehearsalTab(speech) {
 function setEditorStatus(text = "", tone = "") {
   elements.editorStatus.textContent = text;
   elements.editorStatus.dataset.tone = tone;
+}
+
+function focusEditorEntryPoint() {
+  if (state.editor.entryPoint === "rehearsal-bullets") {
+    const panel = elements.editorFields.querySelector("[data-collapse-key='rehearsal-bullets']");
+    const bulletField = elements.editorFields.querySelector("textarea[name='rehearsalBullets']");
+
+    if (panel instanceof HTMLDetailsElement) {
+      panel.open = true;
+      panel.scrollIntoView({ block: "start", inline: "nearest" });
+    }
+
+    if (bulletField instanceof HTMLTextAreaElement) {
+      bulletField.focus({ preventScroll: true });
+      const caret = bulletField.value.length;
+      bulletField.setSelectionRange(caret, caret);
+      return;
+    }
+  }
+
+  elements.editorFields.querySelector("input, textarea, select")?.focus();
 }
 
 function setSaveButtonLabel(label, isBusy = false) {
@@ -2485,6 +2507,7 @@ function openSpeechEditor({ speechId = null, statusPreset = "draft", sourceIdeaI
     statusPreset,
     sourceVersionId: null,
     sourceIdeaId: sourceIdeaId || null,
+    entryPoint: null,
   };
 
   renderEditor();
@@ -2505,6 +2528,7 @@ function openIdeaEditor({ ideaId = null } = {}) {
     statusPreset: "draft",
     sourceVersionId: null,
     sourceIdeaId: null,
+    entryPoint: null,
   };
 
   if (!ideaId && entry?.id) {
@@ -2514,13 +2538,17 @@ function openIdeaEditor({ ideaId = null } = {}) {
   renderEditor();
 }
 
-function openVersionEditor({ speechId = null, versionId = null } = {}) {
+function openVersionEditor({ speechId = null, versionId = null, entryPoint = null } = {}) {
   const speech = speechId ? getSpeechById(speechId) : ensureSelection();
   if (!speech) return;
 
   const selectedVersion = versionId
     ? getVersionById(speech, versionId)
     : getSelectedVersionForSpeech(speech);
+
+  if (entryPoint === "rehearsal-bullets") {
+    state.panels["rehearsal-bullets"] = true;
+  }
 
   state.editor = {
     open: true,
@@ -2534,6 +2562,7 @@ function openVersionEditor({ speechId = null, versionId = null } = {}) {
     statusPreset: speech.status,
     sourceVersionId: selectedVersion?.id || null,
     sourceIdeaId: null,
+    entryPoint,
   };
 
   renderEditor();
@@ -2559,6 +2588,7 @@ function openDeliveryEditor({ speechId = null, deliveryId = null } = {}) {
     statusPreset: speech.status,
     sourceVersionId: null,
     sourceIdeaId: null,
+    entryPoint: null,
   };
 
   renderEditor();
@@ -2579,6 +2609,7 @@ function openPlaybookEditor({ playbookId = null } = {}) {
     statusPreset: "draft",
     sourceVersionId: null,
     sourceIdeaId: null,
+    entryPoint: null,
   };
 
   if (!playbookId && entry?.id) {
@@ -2602,6 +2633,7 @@ function closeEditor() {
     statusPreset: "draft",
     sourceVersionId: null,
     sourceIdeaId: null,
+    entryPoint: null,
   };
 
   elements.editorShell.dataset.layout = "";
@@ -3328,7 +3360,7 @@ function renderEditor() {
   elements.copyEditorButton.textContent = "Copy Speech";
 
   requestAnimationFrame(() => {
-    elements.editorFields.querySelector("input, textarea, select")?.focus();
+    focusEditorEntryPoint();
   });
 }
 
@@ -4121,6 +4153,15 @@ function runAction(action) {
     openVersionEditor({
       speechId: speech.id,
       versionId: getSelectedVersionForSpeech(speech)?.id || null,
+    });
+    return;
+  }
+
+  if (action === "edit-version-bullets" && speech) {
+    openVersionEditor({
+      speechId: speech.id,
+      versionId: getSelectedVersionForSpeech(speech)?.id || null,
+      entryPoint: "rehearsal-bullets",
     });
     return;
   }
