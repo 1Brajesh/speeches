@@ -398,6 +398,15 @@
       background: rgba(23, 33, 43, 0.16);
     }
 
+    .document-shell[data-scroll-mode="page"] {
+      max-height: none;
+      grid-template-rows: auto auto auto;
+    }
+
+    .document-shell[data-scroll-mode="page"] .document-body {
+      overflow: visible;
+    }
+
     #speechIdea:empty,
     #speechTags:empty,
     #detailActionRow:empty,
@@ -2189,7 +2198,7 @@
         </div>
       </aside>
 
-      <section class="document-shell" aria-live="polite">
+      <section class="document-shell" id="documentShell" aria-live="polite">
         <div class="document-top">
           <div class="document-meta">
             <div class="detail-heading">
@@ -2281,6 +2290,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260512a"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260515b"></script>
 </body>
 </html>

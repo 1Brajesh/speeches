@@ -96,6 +96,7 @@ const elements = {
   deliveredCount: document.querySelector("#deliveredCount"),
   libraryStatus: document.querySelector("#libraryStatus"),
   speechList: document.querySelector("#speechList"),
+  documentShell: document.querySelector("#documentShell"),
   speechMode: document.querySelector("#speechMode"),
   speechTitle: document.querySelector("#speechTitle"),
   speechStatusChip: document.querySelector("#speechStatusChip"),
@@ -1554,6 +1555,7 @@ function renderIdeaBody(idea) {
 
 function renderIdeaDetail(idea) {
   elements.tabBar.hidden = true;
+  syncDocumentScrollMode(null);
 
   if (!idea) {
     elements.speechMode.textContent = "Idea";
@@ -1732,6 +1734,7 @@ function renderPlaybookBody(entry) {
 
 function renderPlaybookDetail(entry) {
   elements.tabBar.hidden = true;
+  syncDocumentScrollMode(null);
 
   if (!entry) {
     elements.speechMode.textContent = "Playbook";
@@ -2000,7 +2003,21 @@ function renderTabs() {
   `).join("");
 }
 
+function syncDocumentScrollMode(speech) {
+  if (!elements.documentShell) return;
+
+  const usePageScroll = Boolean(
+    state.workspaceView === "speeches"
+    && speech
+    && state.tab === "overview",
+  );
+
+  elements.documentShell.dataset.scrollMode = usePageScroll ? "page" : "panel";
+}
+
 function renderTabContent(speech) {
+  syncDocumentScrollMode(speech);
+
   if (!speech) {
     elements.tabContent.innerHTML = '<div class="empty-state">No speech selected.</div>';
     return;
