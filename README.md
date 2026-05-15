@@ -1,6 +1,8 @@
-# Speeches Website Notes
+# Speeches Website
 
-Local context note for sessions started in the standalone `speeches` repo.
+Repo docs for the standalone `speeches` site.
+
+Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memories/speeches-codebase.md`.
 
 ## What This Folder Is
 
@@ -89,9 +91,9 @@ Local context note for sessions started in the standalone `speeches` repo.
   - left-side click/tap or left arrow = previous
   - `Escape` = exit
 
-## Recent UI State
+## Current UI State
 
-- As of 2026-05-10:
+- As of 2026-05-15:
   - `Ideas`, `Speeches`, and `Playbook` are separate top-level workspace views.
   - `Ideas` stores lightweight idea seeds instead of creating speech/version records up front.
   - idea seeds can be edited, deleted, searched, filtered by open vs expanded, and expanded into speeches later.
@@ -137,11 +139,12 @@ Local context note for sessions started in the standalone `speeches` repo.
 
 ## Useful Starting Point
 
-When starting work from this repo, read:
+For Codex rehydration, read:
 
-1. `README.md`
-2. `index.html`
-3. `assets/js/brajesh-speeches.js`
-4. `supabase/20260506143000_add_brajesh_speeches.sql`
+1. `/Volumes/T7/kritika4/.codex/memories/speeches-codebase.md`
+2. `README.md`
+3. `index.html`
+4. `assets/js/brajesh-speeches.js`
+5. the latest relevant `supabase/*.sql` migration files
 
-There is also broader repo memory in `/Volumes/T7/kritika4/.codex/memories/brajesh-codebase.md`, but this local file is the fastest place to rehydrate speeches-specific context.
+Use `/Volumes/T7/kritika4/.codex/memories/brajesh-codebase.md` only for shared infra and cross-repo history, not as the canonical `speeches` memory source.

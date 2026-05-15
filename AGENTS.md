@@ -1,6 +1,6 @@
 # Speeches Repo Instructions
 
-Read [README.md](./README.md) first for fast project context before exploring the codebase.
+Read `/Volumes/T7/kritika4/.codex/memories/speeches-codebase.md` first for Codex memory, then read [README.md](./README.md) for repo docs before exploring the codebase.
 
 ## Repo Shape
 - This is the standalone `speeches` repo, not a subfolder inside the main Brajesh repo.
@@ -20,5 +20,6 @@ Read [README.md](./README.md) first for fast project context before exploring th
 
 ## Session Hygiene
 - Prefer `rg` / `rg --files` for search.
-- Update local memory when major behavior, deployment workflow, or schema state changes.
-- Before shutdown, save any important repo-specific context to `README.md` or shared memory if it is not already captured.
+- Update `/Volumes/T7/kritika4/.codex/memories/speeches-codebase.md` when major behavior, deployment workflow, or schema state changes.
+- Keep `README.md` focused on stable repo/product docs; keep Codex rehydration notes in `/Volumes/T7/kritika4/.codex/memories/speeches-codebase.md`.
+- Before shutdown, save any important repo-specific agent context to `/Volumes/T7/kritika4/.codex/memories/speeches-codebase.md` if it is not already captured.
