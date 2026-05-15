@@ -95,6 +95,7 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
 
 - As of 2026-05-15:
   - `Ideas`, `Speeches`, and `Playbook` are separate top-level workspace views.
+  - the main speech workspace now uses a document-first layout with a slim dark library rail and one warm continuous detail canvas instead of stacked summary/body panels.
   - `Ideas` stores lightweight idea seeds instead of creating speech/version records up front.
   - idea seeds can be edited, deleted, searched, filtered by open vs expanded, and expanded into speeches later.
   - `Playbook` is a separate top-level workspace view, not a speech tab.

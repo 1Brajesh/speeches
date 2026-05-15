@@ -23,6 +23,12 @@
       --violet: #a790ff;
       --shadow: 0 26px 72px rgba(0, 0, 0, 0.32);
       --radius: 26px;
+      --paper: #f3ebde;
+      --paper-warm: #ece2d1;
+      --paper-line: rgba(32, 40, 47, 0.12);
+      --paper-ink: #17212b;
+      --paper-muted: rgba(23, 33, 43, 0.72);
+      --paper-faint: rgba(23, 33, 43, 0.5);
       --script-text-size: 20px;
       --script-line-height: 1.76;
       --script-paragraph-gap: 1.76em;
@@ -114,9 +120,9 @@
     }
 
     .page {
-      width: min(1760px, calc(100% - 20px));
+      width: min(1600px, calc(100% - 24px));
       margin: 0 auto;
-      padding: 18px 0 32px;
+      padding: 18px 0 28px;
     }
 
     .masthead {
@@ -268,9 +274,9 @@
 
     .workspace {
       display: grid;
-      grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
-      gap: 18px;
-      align-items: start;
+      grid-template-columns: minmax(264px, 300px) minmax(0, 1fr);
+      gap: 24px;
+      align-items: stretch;
     }
 
     .panel {
@@ -299,6 +305,103 @@
       position: relative;
       z-index: 1;
       padding: 20px;
+    }
+
+    .library-rail {
+      position: sticky;
+      top: 18px;
+      min-height: calc(100vh - 36px);
+      border-radius: 30px;
+    }
+
+    .library-rail .panel-body {
+      display: grid;
+      gap: 18px;
+      align-content: start;
+      height: 100%;
+      padding: 18px;
+    }
+
+    .library-rail .section-title,
+    .library-rail .search-input,
+    .library-rail .metric-row {
+      margin: 0;
+    }
+
+    .document-shell {
+      min-width: 0;
+      min-height: calc(100vh - 36px);
+      max-height: calc(100vh - 36px);
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      border-radius: 34px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0) 18%),
+        linear-gradient(180deg, var(--paper) 0%, #f5eee3 40%, #efe5d5 100%);
+      color: var(--paper-ink);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .document-top,
+    .document-tabs,
+    .document-body {
+      position: relative;
+      z-index: 1;
+    }
+
+    .document-top {
+      padding: 34px 36px 24px;
+      display: grid;
+      gap: 22px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0)),
+        transparent;
+    }
+
+    .document-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .document-meta > .button-row {
+      justify-content: flex-end;
+      max-width: 360px;
+    }
+
+    .document-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 16px 36px;
+      border-top: 1px solid var(--paper-line);
+      border-bottom: 1px solid var(--paper-line);
+      background: rgba(243, 235, 222, 0.9);
+      backdrop-filter: blur(14px);
+    }
+
+    .document-body {
+      min-height: 0;
+      overflow: auto;
+      padding: 28px 36px 36px;
+    }
+
+    .document-body::-webkit-scrollbar {
+      width: 10px;
+    }
+
+    .document-body::-webkit-scrollbar-thumb {
+      border-radius: 999px;
+      background: rgba(23, 33, 43, 0.16);
+    }
+
+    #speechIdea:empty,
+    #speechTags:empty,
+    #detailActionRow:empty,
+    #focusCard:empty {
+      display: none;
     }
 
     .eyebrow {
@@ -458,7 +561,7 @@
     .speech-list {
       display: grid;
       gap: 12px;
-      max-height: calc(100vh - 250px);
+      max-height: calc(100vh - 360px);
       overflow: auto;
       padding-right: 4px;
     }
@@ -478,21 +581,24 @@
 
     .speech-card {
       width: 100%;
-      padding: 16px;
+      padding: 15px;
       text-align: left;
       border-radius: 22px;
       background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03)),
-        rgba(255, 255, 255, 0.02);
+        linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.025)),
+        rgba(255, 255, 255, 0.025);
       display: grid;
       gap: 10px;
       transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
     }
 
     .speech-card[aria-pressed="true"] {
-      transform: translateX(4px);
-      border-color: rgba(123, 183, 255, 0.32);
-      box-shadow: 0 18px 34px rgba(0, 0, 0, 0.2);
+      transform: translateY(-1px);
+      border-color: rgba(123, 183, 255, 0.34);
+      box-shadow: 0 16px 28px rgba(0, 0, 0, 0.18);
+      background:
+        linear-gradient(180deg, rgba(123, 183, 255, 0.12), rgba(255, 255, 255, 0.03)),
+        rgba(255, 255, 255, 0.03);
     }
 
     .speech-card h3 {
@@ -528,16 +634,18 @@
 
     .detail-heading {
       display: grid;
-      gap: 12px;
+      gap: 14px;
+      max-width: 980px;
     }
 
     .detail-title {
       margin: 0;
       font-family: var(--serif);
-      font-size: clamp(2.4rem, 4vw, 4.2rem);
-      line-height: 0.92;
+      font-size: clamp(3rem, 5vw, 5.5rem);
+      line-height: 0.9;
       letter-spacing: -0.05em;
       font-weight: 600;
+      color: var(--paper-ink);
     }
 
     .focus-card,
@@ -551,10 +659,14 @@
     }
 
     .focus-card {
-      padding: 16px 18px;
+      padding-top: 20px;
+      border-radius: 0;
+      border: 0;
+      border-top: 1px solid var(--paper-line);
+      background: transparent;
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 18px;
       align-content: start;
     }
 
@@ -564,13 +676,13 @@
       font-size: 0.8rem;
       text-transform: uppercase;
       letter-spacing: 0.12em;
-      color: var(--faint);
+      color: var(--paper-faint);
     }
 
     .focus-card p,
     .focus-card span {
       margin: 0;
-      color: var(--text);
+      color: var(--paper-ink);
       line-height: 1.45;
     }
 
@@ -594,7 +706,7 @@
       display: grid;
       gap: 4px;
       padding-top: 10px;
-      border-top: 1px solid var(--line);
+      border-top: 1px solid var(--paper-line);
     }
 
     .focus-detail:first-child {
@@ -603,7 +715,7 @@
     }
 
     .focus-label {
-      color: var(--faint);
+      color: var(--paper-faint);
       font-size: 0.74rem;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -1070,6 +1182,246 @@
       background: rgba(255, 255, 255, 0.02);
     }
 
+    .document-shell .eyebrow {
+      border-color: rgba(23, 33, 43, 0.1);
+      background: rgba(242, 200, 118, 0.18);
+      color: #8d5e1d;
+    }
+
+    .document-shell .body-copy,
+    .document-shell .helper-copy,
+    .document-shell .status,
+    .document-shell .collapse-summary-copy,
+    .document-shell .timeline-meta,
+    .document-shell .feedback-card p,
+    .document-shell .action-list li,
+    .document-shell .info-row span,
+    .document-shell .info-row p,
+    .document-shell .playbook-guidance-principle,
+    .document-shell .editor-card-copy {
+      color: var(--paper-muted);
+    }
+
+    .document-shell .meta-row,
+    .document-shell .tag-row,
+    .document-shell .button-row,
+    .document-shell .metric-row,
+    .document-shell .timeline-meta {
+      gap: 12px;
+    }
+
+    .document-shell .status-chip,
+    .document-shell .meta-chip,
+    .document-shell .tag-chip,
+    .document-shell .metric-chip {
+      border-color: rgba(23, 33, 43, 0.1);
+      background: rgba(255, 255, 255, 0.42);
+      color: var(--paper-muted);
+    }
+
+    .document-shell .status-chip[data-status="idea"] {
+      color: #8d5e1d;
+      border-color: rgba(217, 162, 75, 0.28);
+      background: rgba(217, 162, 75, 0.14);
+    }
+
+    .document-shell .status-chip[data-status="draft"] {
+      color: #3b6694;
+      border-color: rgba(119, 179, 247, 0.28);
+      background: rgba(119, 179, 247, 0.14);
+    }
+
+    .document-shell .status-chip[data-status="rehearsal_ready"],
+    .document-shell .status-chip[data-status="expanded"],
+    .document-shell .status-chip[data-status="pinned"] {
+      color: #255238;
+      border-color: rgba(112, 183, 135, 0.28);
+      background: rgba(112, 183, 135, 0.14);
+    }
+
+    .document-shell .status-chip[data-status="delivered"] {
+      color: #5c4b8f;
+      border-color: rgba(167, 144, 255, 0.26);
+      background: rgba(167, 144, 255, 0.14);
+    }
+
+    .document-shell .status-chip[data-status="playbook"] {
+      color: #8d5e1d;
+      border-color: rgba(217, 162, 75, 0.28);
+      background: rgba(217, 162, 75, 0.14);
+    }
+
+    .document-shell .ghost-button,
+    .document-shell .meta-button,
+    .document-shell .script-button,
+    .document-shell .primary-button,
+    .document-shell .danger-button,
+    .document-shell .tab-pill {
+      border-color: rgba(23, 33, 43, 0.12);
+      background: rgba(23, 33, 43, 0.06);
+      color: var(--paper-muted);
+      box-shadow: none;
+    }
+
+    .document-shell .ghost-button:hover,
+    .document-shell .meta-button:hover,
+    .document-shell .script-button:hover,
+    .document-shell .primary-button:hover,
+    .document-shell .danger-button:hover,
+    .document-shell .tab-pill:hover,
+    .document-shell .ghost-button:focus-visible,
+    .document-shell .meta-button:focus-visible,
+    .document-shell .script-button:focus-visible,
+    .document-shell .primary-button:focus-visible,
+    .document-shell .danger-button:focus-visible,
+    .document-shell .tab-pill:focus-visible {
+      box-shadow: 0 10px 18px rgba(23, 33, 43, 0.08);
+    }
+
+    .document-shell .primary-button {
+      border-color: rgba(17, 26, 34, 0.22);
+      background: linear-gradient(180deg, #1d2a36, #111a22);
+      color: #f7f2e8;
+    }
+
+    .document-shell .meta-button {
+      color: #8e365d;
+      background: rgba(202, 109, 144, 0.12);
+      border-color: rgba(202, 109, 144, 0.2);
+    }
+
+    .document-shell .script-button {
+      color: #255238;
+      background: rgba(112, 183, 135, 0.14);
+      border-color: rgba(112, 183, 135, 0.22);
+    }
+
+    .document-shell .danger-button {
+      color: #8a352b;
+      background: rgba(188, 89, 77, 0.12);
+      border-color: rgba(188, 89, 77, 0.18);
+    }
+
+    .document-shell .tab-pill[aria-pressed="true"] {
+      background: rgba(23, 33, 43, 0.08);
+      border-color: rgba(23, 33, 43, 0.14);
+      color: var(--paper-ink);
+    }
+
+    .document-shell .card,
+    .document-shell .tab-panel,
+    .document-shell .notes-box,
+    .document-shell .script-box,
+    .document-shell .collapse-card,
+    .document-shell .version-card,
+    .document-shell .delivery-card,
+    .document-shell .feedback-card,
+    .document-shell .bullet-card,
+    .document-shell .playbook-guidance-card,
+    .document-shell .text-size-control {
+      border-color: rgba(23, 33, 43, 0.08);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0.3)),
+        rgba(255, 255, 255, 0.22);
+      box-shadow: none;
+    }
+
+    .document-shell .card,
+    .document-shell .tab-panel {
+      border-radius: 28px;
+      padding: 20px;
+    }
+
+    .document-shell .collapse-card {
+      border-radius: 28px;
+    }
+
+    .document-shell .collapse-card[open] {
+      box-shadow: 0 14px 28px rgba(23, 33, 43, 0.08);
+    }
+
+    .document-shell .panel-head h4,
+    .document-shell .card h4,
+    .document-shell .playbook-principle,
+    .document-shell .version-title,
+    .document-shell .delivery-title,
+    .document-shell .feedback-card strong,
+    .document-shell .info-row strong,
+    .document-shell .bullet-card strong,
+    .document-shell .collapse-summary h4 {
+      color: var(--paper-ink);
+    }
+
+    .document-shell .notes-box .body-copy,
+    .document-shell .script-box .body-copy,
+    .document-shell .compare-segment,
+    .document-shell .compare-empty {
+      color: var(--paper-ink);
+    }
+
+    .document-shell .script-box,
+    .document-shell .notes-box {
+      border-radius: 24px;
+    }
+
+    .document-shell .version-card[data-selected="true"],
+    .document-shell .delivery-card[data-selected="true"] {
+      border-color: rgba(23, 33, 43, 0.16);
+      box-shadow: 0 14px 24px rgba(23, 33, 43, 0.08);
+    }
+
+    .document-shell .compare-note-box[data-compare-state="changed"] {
+      border-color: rgba(123, 183, 255, 0.22);
+      box-shadow: inset 0 0 0 1px rgba(123, 183, 255, 0.08);
+    }
+
+    .document-shell .compare-segment {
+      border-color: rgba(23, 33, 43, 0.08);
+      background: rgba(255, 255, 255, 0.44);
+    }
+
+    .document-shell .compare-segment[data-state="same"] {
+      border-color: rgba(23, 33, 43, 0.08);
+    }
+
+    .document-shell .compare-segment[data-state="added"] {
+      border-color: rgba(112, 183, 135, 0.28);
+      background: rgba(112, 183, 135, 0.12);
+    }
+
+    .document-shell .compare-segment[data-state="removed"] {
+      border-color: rgba(188, 89, 77, 0.24);
+      background: rgba(188, 89, 77, 0.12);
+    }
+
+    .document-shell .text-size-control {
+      background: rgba(255, 255, 255, 0.42);
+      color: var(--paper-muted);
+    }
+
+    .document-shell .text-size-label,
+    .document-shell .text-size-value,
+    .document-shell .info-row strong,
+    .document-shell .focus-label {
+      color: var(--paper-faint);
+    }
+
+    .document-shell .timeline-dot {
+      background: #5d89b7;
+      box-shadow: 0 0 0 5px rgba(93, 137, 183, 0.12);
+    }
+
+    .document-shell .info-row,
+    .document-shell .collapse-content {
+      border-color: var(--paper-line);
+    }
+
+    .document-shell .empty-state {
+      border-color: rgba(23, 33, 43, 0.16);
+      background: rgba(255, 255, 255, 0.26);
+      color: var(--paper-muted);
+    }
+
     .editor-shell {
       position: fixed;
       inset: 0;
@@ -1428,6 +1780,25 @@
         grid-template-columns: 1fr;
       }
 
+      .library-rail {
+        position: relative;
+        top: auto;
+        min-height: auto;
+      }
+
+      .document-shell {
+        min-height: auto;
+        max-height: none;
+      }
+
+      .document-meta {
+        display: grid;
+      }
+
+      .document-body {
+        overflow: visible;
+      }
+
       .focus-card {
         grid-template-columns: 1fr;
       }
@@ -1447,13 +1818,28 @@
 
     @media (max-width: 620px) {
       .page {
-        width: min(1760px, calc(100% - 16px));
+        width: min(1600px, calc(100% - 16px));
         padding-top: 14px;
       }
 
       .panel-body,
       .tab-panel {
         padding: 16px;
+      }
+
+      .library-rail .panel-body {
+        padding: 16px;
+      }
+
+      .document-top,
+      .document-tabs,
+      .document-body {
+        padding-left: 18px;
+        padding-right: 18px;
+      }
+
+      .document-top {
+        padding-top: 24px;
       }
 
       .fullscreen-bar,
@@ -1525,7 +1911,7 @@
     </section>
 
     <section class="workspace" id="appShell" hidden>
-      <aside class="panel">
+      <aside class="panel library-rail">
         <div class="panel-body">
           <span class="eyebrow" id="libraryEyebrow">Library</span>
           <h2 class="section-title" id="libraryTitle">Speeches</h2>
@@ -1546,9 +1932,9 @@
         </div>
       </aside>
 
-      <section class="panel workspace-summary">
-        <div class="panel-body">
-          <div class="summary-grid">
+      <section class="document-shell" aria-live="polite">
+        <div class="document-top">
+          <div class="document-meta">
             <div class="detail-heading">
               <span class="eyebrow" id="speechMode">Speech</span>
               <h1 class="detail-title" id="speechTitle">Select a speech</h1>
@@ -1557,23 +1943,18 @@
                 <span class="meta-chip" id="speechGoalChip">Goal</span>
                 <span class="meta-chip" id="speechCountChip">0 runs</span>
               </div>
-              <p class="body-copy" id="speechIdea">Choose a speech from the left.</p>
+              <p class="body-copy" id="speechIdea">Choose a speech from the library to read, revise, or rehearse it.</p>
               <div class="tag-row" id="speechTags"></div>
-              <div class="button-row" id="detailActionRow"></div>
             </div>
 
-            <div class="focus-card" id="focusCard"></div>
+            <div class="button-row" id="detailActionRow"></div>
           </div>
-        </div>
-      </section>
 
-      <section class="panel workspace-body">
-        <div class="panel-body">
-          <div class="detail-layout">
-            <div class="tab-strip" id="tabBar" aria-label="Speech sections"></div>
-            <section class="tab-panel" id="tabContent"></section>
-          </div>
+          <div class="focus-card" id="focusCard"></div>
         </div>
+
+        <div class="document-tabs" id="tabBar" aria-label="Speech sections"></div>
+        <section class="document-body" id="tabContent"></section>
       </section>
     </section>
   </main>
