@@ -4100,7 +4100,6 @@ function runAction(action) {
   const playbookEntry = ensurePlaybookSelection();
 
   if (action === "new-idea") {
-    state.workspaceView = "ideas";
     openIdeaEditor();
     return;
   }
