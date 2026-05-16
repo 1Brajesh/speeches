@@ -1515,37 +1515,23 @@ function renderIdeaBody(idea) {
         </div>
       </div>
 
-      <div class="two-up">
-        <div class="card">
-          <div class="panel-head">
-            <h4>Expansion Status</h4>
-            <span class="meta-chip">${linkedSpeech ? "Expanded" : "Open"}</span>
-          </div>
-          <div class="info-grid">
-            <div class="info-row">
-              <strong>Linked Speech</strong>
-              <span>${displayText(linkedSpeech?.title || "Not expanded yet.")}</span>
-            </div>
-            <div class="info-row">
-              <strong>Created</strong>
-              <span>${displayText(formatDateTime(idea.createdAt || idea.updatedAt || ""))}</span>
-            </div>
-            <div class="info-row">
-              <strong>Tags</strong>
-              <div class="tag-row">${idea.tags.length ? renderTagChips(idea.tags) : '<span>No tags yet.</span>'}</div>
-            </div>
-          </div>
+      <div class="card">
+        <div class="panel-head">
+          <h4>Expansion</h4>
+          <span class="meta-chip">${linkedSpeech ? "Expanded" : "Open"}</span>
         </div>
-
-        <div class="card">
-          <div class="panel-head">
-            <h4>How To Use It</h4>
-            <span class="meta-chip">Lightweight capture</span>
+        <div class="info-grid">
+          <div class="info-row">
+            <strong>Linked Speech</strong>
+            <span>${displayText(linkedSpeech?.title || "Not expanded yet.")}</span>
           </div>
-          <div class="notes-box">
-            <p class="body-copy">${linkedSpeech
-              ? "This idea already has a linked speech. Keep the seed if you want the original spark preserved beside the full draft."
-              : "Keep this short and vivid. Expand it into a speech only when you are ready to structure the draft, versions, rehearsal, and runs."}</p>
+          <div class="info-row">
+            <strong>Created</strong>
+            <span>${displayText(formatDateTime(idea.createdAt || idea.updatedAt || ""))}</span>
+          </div>
+          <div class="info-row">
+            <strong>Tags</strong>
+            <div class="tag-row">${idea.tags.length ? renderTagChips(idea.tags) : '<span>No tags yet.</span>'}</div>
           </div>
         </div>
       </div>
@@ -1600,25 +1586,14 @@ function renderIdeaDetail(idea) {
   elements.speechStatusChip.dataset.status = linkedSpeech ? "expanded" : "idea";
   elements.speechGoalChip.textContent = linkedSpeech ? "Linked to speech" : "Open seed";
   elements.speechCountChip.textContent = `${idea.tags.length} ${idea.tags.length === 1 ? "tag" : "tags"}`;
-  elements.speechIdea.textContent = excerpt(idea.idea, 240) || "No idea note yet.";
+  elements.speechIdea.textContent = "";
   elements.speechTags.innerHTML = renderTagChips(idea.tags);
   elements.detailActionRow.innerHTML = `
     <button class="meta-button" type="button" data-action="edit-idea">Edit Idea</button>
     <button class="primary-button" type="button" data-action="${linkedSpeech ? "open-linked-speech" : "expand-idea"}">${linkedSpeech ? "Open Speech" : "Expand to Speech"}</button>
     <button class="danger-button" type="button" data-action="delete-idea">Delete Idea</button>
   `;
-  elements.focusCard.innerHTML = `
-    <div class="focus-block" data-size="wide">
-      <strong>Seed</strong>
-      <p>${displayText(excerpt(idea.idea, 220), "No idea note yet.")}</p>
-      <span class="helper-copy">${displayText(idea.updatedAt ? `Last edited ${formatDateTime(idea.updatedAt)}` : "Not edited yet.")}</span>
-    </div>
-    <div class="focus-block">
-      <strong>Expansion</strong>
-      <p>${linkedSpeech ? displayText(linkedSpeech.title) : "Not expanded yet"}</p>
-      <span class="helper-copy">${linkedSpeech ? "This idea already has a linked speech." : "Turn it into a speech when you are ready for drafts and rehearsal."}</span>
-    </div>
-  `;
+  elements.focusCard.innerHTML = "";
   elements.tabContent.innerHTML = renderIdeaBody(idea);
   syncHeaderActions();
 }
