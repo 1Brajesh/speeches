@@ -3198,7 +3198,7 @@ function ideaEditorConfig(entry) {
   const linkedSpeech = entry?.expandedSpeechId ? getSpeechById(entry.expandedSpeechId) : null;
 
   return {
-    layout: "drawer",
+    layout: isEdit ? "drawer" : "modal",
     modeLabel: isEdit ? "Edit Idea" : "New Idea",
     title: isEdit ? entry.title : "New Idea",
     context: isEdit

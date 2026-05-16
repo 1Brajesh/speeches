@@ -1704,6 +1704,12 @@
       padding: 18px;
     }
 
+    .editor-shell[data-layout="modal"] {
+      justify-items: center;
+      align-items: center;
+      padding: 18px;
+    }
+
     .editor-backdrop {
       position: absolute;
       inset: 0;
@@ -1736,6 +1742,17 @@
       overflow: hidden;
     }
 
+    .editor-shell[data-layout="modal"] .editor-drawer {
+      width: min(760px, 100%);
+      height: auto;
+      max-height: calc(100vh - 36px);
+      max-height: calc(100dvh - 36px);
+      border-radius: 30px;
+      border: 1px solid var(--line);
+      box-shadow: 0 32px 84px rgba(0, 0, 0, 0.36);
+      overflow: auto;
+    }
+
     .editor-drawer::before {
       background:
         linear-gradient(130deg, rgba(255, 255, 255, 0.04), transparent 22%, transparent 78%, rgba(255, 255, 255, 0.03)),
@@ -1756,6 +1773,13 @@
       display: flex;
       flex-direction: column;
       gap: 20px;
+    }
+
+    .editor-shell[data-layout="modal"] .editor-layout {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 18px;
     }
 
     .editor-header {
@@ -1790,6 +1814,10 @@
       display: none;
     }
 
+    .editor-shell[data-layout="modal"] .editor-layout > .button-row {
+      display: none;
+    }
+
     .editor-shell[data-layout="studio"] #editorFields {
       flex: 1 1 auto;
       min-height: 0;
@@ -1799,6 +1827,12 @@
       overflow: auto;
       overflow-anchor: none;
       padding-right: 4px;
+    }
+
+    .editor-shell[data-layout="modal"] #editorFields {
+      display: grid;
+      gap: 18px;
+      align-content: start;
     }
 
     .editor-grid {
@@ -2290,6 +2324,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260515b"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260515c"></script>
 </body>
 </html>
