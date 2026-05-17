@@ -1984,7 +1984,7 @@ function syncDocumentScrollMode(speech) {
   const usePageScroll = Boolean(
     state.workspaceView === "speeches"
     && speech
-    && state.tab === "overview",
+    && (state.tab === "overview" || state.tab === "versions"),
   );
 
   elements.documentShell.dataset.scrollMode = usePageScroll ? "page" : "panel";
@@ -2166,7 +2166,7 @@ function renderVersionsTab(speech) {
         <div class="panel-tools">
           ${renderScriptReadingControls()}
         </div>
-        <div class="script-box script-box-compact scroll-area" style="margin-bottom: 14px;">
+        <div class="script-box version-script-box" style="margin-bottom: 14px;">
           ${renderScriptBodyText(selectedVersion?.speechBody, "No speech body yet.")}
         </div>
         <div class="notes-box">
