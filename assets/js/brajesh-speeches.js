@@ -51,7 +51,6 @@ const state = {
     scriptParagraphSpacing: loadScriptParagraphSpacingPreference(),
   },
   panels: {
-    "version-history": false,
     "rehearsal-bullets": false,
   },
   editor: {
@@ -2099,7 +2098,6 @@ function renderVersionsTab(speech) {
   const basedOnVersion = selectedVersion?.basedOn ? getVersionById(speech, selectedVersion.basedOn) : null;
   const compareReference = getCompareReferenceVersion(speech, selectedVersion);
   const compareVersion = compareReference.version;
-  const versionHistoryOpen = isPanelOpen("version-history");
   const canDeleteVersion = Boolean(selectedVersion) && speech.versions.length > 1;
   const editTimestampLabel = selectedVersion ? `Last edited ${formatDateTime(selectedVersion.updatedAt)}` : "No version selected";
   const compareOpen = Boolean(state.versionCompareOpen && selectedVersion && compareVersion);
@@ -2118,36 +2116,33 @@ function renderVersionsTab(speech) {
 
   return `
     <div class="reader-stack">
-      <details class="collapse-card" data-collapse-key="version-history" ${versionHistoryOpen ? "open" : ""}>
-        <summary class="collapse-summary">
+      <div class="card">
+        <div class="panel-head">
           <div>
             <h4>Version History</h4>
-            <p class="collapse-summary-copy">Selected version: ${displayText(selectedVersion?.label, "No version")}.</p>
+            <p class="helper-copy">Selected version: ${displayText(selectedVersion?.label, "No version")}.</p>
           </div>
-          <div class="collapse-summary-meta">
+          <div class="button-row">
             <span class="meta-chip">${speech.versions.length} total</span>
-            <span class="meta-chip">${versionHistoryOpen ? "Collapse" : "Expand"}</span>
-          </div>
-        </summary>
-        <div class="collapse-content">
-          <div class="version-list scroll-area">
-            ${speech.versions.map((version) => `
-              <div class="version-card" data-selected="${String(selectedVersion?.id === version.id)}">
-                <button class="version-button" type="button" data-version-id="${version.id}">
-                  <div class="version-title">${displayText(version.label)}</div>
-                  <div class="timeline-meta">
-                    <span>${displayText(`Last edited ${formatDateTime(version.updatedAt)}`)}</span>
-                    <span>${version.estimatedMinutes} min</span>
-                    <span>${versionWordCount(version)} words</span>
-                    <span>${version.rehearsalBullets.length} bullets</span>
-                  </div>
-                  <p class="helper-copy">${displayText(version.revisionNote, "No revision note.")}</p>
-                </button>
-              </div>
-            `).join("")}
           </div>
         </div>
-      </details>
+        <div class="version-list">
+          ${speech.versions.map((version) => `
+            <div class="version-card" data-selected="${String(selectedVersion?.id === version.id)}">
+              <button class="version-button" type="button" data-version-id="${version.id}">
+                <div class="version-title">${displayText(version.label)}</div>
+                <div class="timeline-meta">
+                  <span>${displayText(`Last edited ${formatDateTime(version.updatedAt)}`)}</span>
+                  <span>${version.estimatedMinutes} min</span>
+                  <span>${versionWordCount(version)} words</span>
+                  <span>${version.rehearsalBullets.length} bullets</span>
+                </div>
+                <p class="helper-copy">${displayText(version.revisionNote, "No revision note.")}</p>
+              </button>
+            </div>
+          `).join("")}
+        </div>
+      </div>
 
       <div class="card">
         <div class="panel-head">
@@ -2813,7 +2808,7 @@ function renderScriptComposer({
         </div>
         <div class="collapse-summary-meta">
           <span class="meta-chip">${bulletCount} ${bulletCount === 1 ? "bullet" : "bullets"}</span>
-          <span class="meta-chip">${panelOpen ? "Collapse" : "Expand"}</span>
+          <span class="meta-chip" data-collapse-label>${panelOpen ? "Collapse" : "Expand"}</span>
         </div>
       </summary>
       <div class="collapse-content">
@@ -4538,6 +4533,11 @@ document.addEventListener("toggle", (event) => {
   }
 
   state.panels[collapseKey] = panel.open;
+
+  const collapseLabel = panel.querySelector("[data-collapse-label]");
+  if (collapseLabel) {
+    collapseLabel.textContent = panel.open ? "Collapse" : "Expand";
+  }
 }, true);
 
 db.auth.onAuthStateChange((event, session) => {
