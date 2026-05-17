@@ -1984,7 +1984,7 @@ function syncDocumentScrollMode(speech) {
   const usePageScroll = Boolean(
     state.workspaceView === "speeches"
     && speech
-    && (state.tab === "overview" || state.tab === "versions"),
+    && (state.tab === "overview" || state.tab === "versions" || state.tab === "runs"),
   );
 
   elements.documentShell.dataset.scrollMode = usePageScroll ? "page" : "panel";
