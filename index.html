@@ -762,6 +762,10 @@
       gap: 16px;
     }
 
+    .rehearsal-layout {
+      align-items: stretch;
+    }
+
     .reader-stack {
       display: grid;
       gap: 16px;
@@ -769,6 +773,13 @@
 
     .card {
       padding: 16px;
+    }
+
+    .rehearsal-card {
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
     }
 
     .card h4,
@@ -788,6 +799,64 @@
       gap: 12px;
       align-items: start;
       margin-bottom: 14px;
+    }
+
+    .rehearsal-card .panel-head {
+      margin-bottom: 0;
+    }
+
+    .rehearsal-bullet-list {
+      flex: 1 1 auto;
+      align-content: start;
+    }
+
+    .rehearsal-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: auto;
+    }
+
+    .rehearsal-actions .script-button,
+    .rehearsal-actions .primary-button {
+      width: 100%;
+    }
+
+    .rehearsal-launch-button {
+      flex: 1 1 auto;
+      min-height: clamp(220px, 36vh, 420px);
+      padding: 22px 24px;
+      border-radius: 26px;
+      text-align: left;
+      display: grid;
+      gap: 12px;
+      align-content: end;
+    }
+
+    .rehearsal-launch-kicker {
+      font-size: 0.8rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      opacity: 0.82;
+    }
+
+    .rehearsal-launch-title {
+      font-family: var(--serif);
+      font-size: clamp(1.8rem, 3vw, 2.6rem);
+      line-height: 0.98;
+      letter-spacing: -0.04em;
+    }
+
+    .rehearsal-launch-copy {
+      line-height: 1.55;
+      color: inherit;
+      opacity: 0.92;
+    }
+
+    .rehearsal-empty-state {
+      min-height: 220px;
+      display: grid;
+      place-items: center;
     }
 
     .version-list,
@@ -2089,6 +2158,10 @@
         grid-template-columns: 1fr;
       }
 
+      .rehearsal-layout {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
       .library-rail {
         position: relative;
         top: auto;
@@ -2122,6 +2195,16 @@
 
       .speech-list {
         max-height: none;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .rehearsal-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .rehearsal-launch-button {
+        min-height: 180px;
       }
     }
 
@@ -2333,6 +2416,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260517c"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260519a"></script>
 </body>
 </html>

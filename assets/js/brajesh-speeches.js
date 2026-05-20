@@ -2368,16 +2368,21 @@ function renderRehearsalTab(speech) {
   const leftTitle = speech.status === "idea" ? "Idea Prompts" : "Rehearsal Bullets";
   const rightTitle = speech.status === "idea" ? "Prompt View" : "Fullscreen Rehearsal";
   const buttonLabel = speech.status === "idea" ? "Open Prompt View" : "Start Fullscreen Rehearsal";
+  const editLabel = speech.status === "idea" ? "Edit Note" : "Edit Bullets";
+  const launchKicker = speech.status === "idea" ? "Focus prompt mode" : "Cue view";
+  const launchCopy = speech.status === "idea"
+    ? "Open one prompt at a time in a clean fullscreen view."
+    : "Open a larger cue card. Tap the right side to advance and the left side to go back.";
 
   return `
-    <div class="two-up">
-      <div class="card">
+    <div class="two-up rehearsal-layout">
+      <div class="card rehearsal-card">
         <div class="panel-head">
           <h4>${leftTitle}</h4>
           <span class="meta-chip">${bullets.length} bullets</span>
         </div>
         ${bullets.length ? `
-          <div class="bullet-list">
+          <div class="bullet-list rehearsal-bullet-list">
             ${bullets.map((bullet, index) => `
               <div class="bullet-card">
                 <strong>Bullet ${String(index + 1).padStart(2, "0")}</strong>
@@ -2386,19 +2391,19 @@ function renderRehearsalTab(speech) {
             `).join("")}
           </div>
         ` : `
-          <div class="empty-state">No rehearsal bullets added yet.</div>
+          <div class="empty-state rehearsal-empty-state">No rehearsal bullets added yet.</div>
         `}
+        <div class="rehearsal-actions">
+          <button class="script-button" type="button" data-action="edit-version-bullets">${editLabel}</button>
+        </div>
       </div>
 
-      <div class="card">
+      <div class="card rehearsal-card rehearsal-launch-card">
         <div class="panel-head">
           <h4>${rightTitle}</h4>
-          <div class="button-row">
-            <span class="meta-chip">${version?.label || "No version"}</span>
-            <button class="script-button" type="button" data-action="edit-version-bullets">${speech.status === "idea" ? "Edit Note" : "Edit Bullets"}</button>
-          </div>
+          <span class="meta-chip">${version?.label || "No version"}</span>
         </div>
-        <div class="info-grid" style="margin-bottom: 16px;">
+        <div class="info-grid">
           <div class="info-row">
             <strong>Version</strong>
             <span>${displayText(version?.label)}</span>
@@ -2412,8 +2417,12 @@ function renderRehearsalTab(speech) {
             <span>${version?.estimatedMinutes || "-"} min</span>
           </div>
         </div>
-        <div class="button-row">
-          <button class="primary-button" type="button" data-action="start-rehearsal">${buttonLabel}</button>
+        <div class="rehearsal-actions">
+          <button class="primary-button rehearsal-launch-button" type="button" data-action="start-rehearsal">
+            <span class="rehearsal-launch-kicker">${launchKicker}</span>
+            <strong class="rehearsal-launch-title">${buttonLabel}</strong>
+            <span class="rehearsal-launch-copy">${launchCopy}</span>
+          </button>
         </div>
       </div>
     </div>
