@@ -310,15 +310,20 @@
     .library-rail {
       position: sticky;
       top: 18px;
+      height: calc(100vh - 36px);
+      height: calc(100dvh - 36px);
       min-height: calc(100vh - 36px);
+      max-height: calc(100vh - 36px);
+      max-height: calc(100dvh - 36px);
       border-radius: 30px;
     }
 
     .library-rail .panel-body {
-      display: grid;
+      display: flex;
+      flex-direction: column;
       gap: 18px;
-      align-content: start;
       height: 100%;
+      min-height: 0;
       padding: 18px;
     }
 
@@ -570,8 +575,9 @@
 
     .speech-list {
       display: grid;
+      flex: 1 1 auto;
       gap: 12px;
-      max-height: calc(100vh - 360px);
+      min-height: 0;
       overflow: auto;
       padding-right: 4px;
     }
@@ -2156,7 +2162,9 @@
       .library-rail {
         position: relative;
         top: auto;
+        height: auto;
         min-height: auto;
+        max-height: none;
       }
 
       .document-shell {
