@@ -20,6 +20,7 @@ const SCRIPT_PARAGRAPH_SPACING_MIN = 0.6;
 const SCRIPT_PARAGRAPH_SPACING_MAX = 2.6;
 const SCRIPT_PARAGRAPH_SPACING_STEP = 0.05;
 const SCRIPT_PARAGRAPH_SPACING_DEFAULT = 1.76;
+const REHEARSAL_TIMER_TICK_MS = 250;
 
 const state = {
   user: null,
@@ -48,6 +49,8 @@ const state = {
     speechId: null,
     versionId: null,
     index: 0,
+    mode: "manual",
+    nextAdvanceAt: 0,
   },
   preferences: {
     scriptTextSize: loadScriptTextSizePreference(),
@@ -82,6 +85,7 @@ let playbookDeleteBusy = false;
 const speechDetailPromises = new Map();
 let speechSearchTimer = null;
 let speechSearchRequestToken = 0;
+let rehearsalAutoTimer = null;
 
 const elements = {
   pageStatus: document.querySelector("#pageStatus"),
@@ -135,6 +139,8 @@ const elements = {
   fullscreenBody: document.querySelector("#fullscreenBody"),
   fullscreenType: document.querySelector("#fullscreenType"),
   fullscreenTitle: document.querySelector("#fullscreenTitle"),
+  fullscreenModeToggle: document.querySelector("#fullscreenModeToggle"),
+  fullscreenTimerStatus: document.querySelector("#fullscreenTimerStatus"),
   fullscreenBullet: document.querySelector("#fullscreenBullet"),
   fullscreenProgress: document.querySelector("#fullscreenProgress"),
   fullscreenCounter: document.querySelector("#fullscreenCounter"),
@@ -254,6 +260,7 @@ function resetSpeechState() {
   state.rehearsal.speechId = null;
   state.rehearsal.versionId = null;
   state.rehearsal.index = 0;
+  state.rehearsal.nextAdvanceAt = 0;
   closeEditor();
   closeRehearsal();
 }
@@ -549,6 +556,186 @@ function scheduleAutoSizeRichTextareas(root = document, options = {}) {
 function parseMinutes(value) {
   const parsed = Number.parseInt(cleanText(value), 10);
   return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function formatDurationLabel(totalSeconds) {
+  const safeSeconds = Math.max(0, Math.round(Number(totalSeconds) || 0));
+
+  if (!safeSeconds) {
+    return "0s";
+  }
+
+  if (safeSeconds < 60) {
+    return `${safeSeconds}s`;
+  }
+
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+  return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`;
+}
+
+function formatMinuteLabel(minutes) {
+  const safeMinutes = Math.max(0, Number.parseInt(minutes, 10) || 0);
+  return `${safeMinutes} ${safeMinutes === 1 ? "min" : "mins"}`;
+}
+
+function getRehearsalTiming(version, bullets = version?.rehearsalBullets || []) {
+  const bulletCount = Array.isArray(bullets) ? bullets.length : 0;
+  const minutes = Math.max(0, Number.parseInt(version?.estimatedMinutes || 0, 10) || 0);
+  const totalSeconds = minutes * 60;
+  const intervalMs = bulletCount && totalSeconds > 0
+    ? Math.max(1000, (totalSeconds * 1000) / bulletCount)
+    : 0;
+
+  return {
+    bulletCount,
+    minutes,
+    totalSeconds,
+    intervalMs,
+    autoAvailable: bulletCount > 0 && minutes > 0,
+  };
+}
+
+function getEffectiveRehearsalMode(timing) {
+  return state.rehearsal.mode === "auto" && timing.autoAvailable ? "auto" : "manual";
+}
+
+function renderRehearsalModeToggle(timing, options = {}) {
+  const { ariaLabel = "Rehearsal pacing mode", extraClassName = "" } = options;
+  const mode = getEffectiveRehearsalMode(timing);
+  const className = ["pill-row", "rehearsal-mode-toggle", extraClassName].filter(Boolean).join(" ");
+
+  return `
+    <div class="${className}" role="group" aria-label="${escapeHtml(ariaLabel)}">
+      <button class="tab-pill" type="button" data-rehearsal-mode="manual" aria-pressed="${mode === "manual"}">Manual</button>
+      <button class="tab-pill" type="button" data-rehearsal-mode="auto" aria-pressed="${mode === "auto"}" ${timing.autoAvailable ? "" : "disabled"}>Auto</button>
+    </div>
+  `;
+}
+
+function getRehearsalTimingSummary(timing) {
+  if (!timing.bulletCount) {
+    return "Add rehearsal bullets to use cue cards.";
+  }
+
+  if (!timing.autoAvailable) {
+    return "Manual pacing is active. Set Target Minutes above 0 to enable auto-advance.";
+  }
+
+  const cadence = formatDurationLabel(timing.intervalMs / 1000);
+  const bulletLabel = formatCountLabel(timing.bulletCount, "bullet");
+  const targetLabel = formatMinuteLabel(timing.minutes);
+
+  if (getEffectiveRehearsalMode(timing) === "auto") {
+    return `Auto pacing is selected. Cards will advance every ${cadence} across ${bulletLabel} from a ${targetLabel} target.`;
+  }
+
+  return `Manual pacing is active. Auto would advance every ${cadence} across ${bulletLabel} from a ${targetLabel} target.`;
+}
+
+function getRehearsalTimerStatus(timing) {
+  if (!timing.bulletCount) {
+    return "No rehearsal bullets available.";
+  }
+
+  if (!timing.autoAvailable) {
+    return "Manual pacing. Set Target Minutes above 0 to enable auto-advance.";
+  }
+
+  const cadence = formatDurationLabel(timing.intervalMs / 1000);
+
+  if (getEffectiveRehearsalMode(timing) !== "auto") {
+    return `Manual pacing. Auto is ready at ${cadence} per card.`;
+  }
+
+  if (state.rehearsal.index >= timing.bulletCount - 1) {
+    return `Auto pacing complete. Final card stays on screen at ${cadence} per card.`;
+  }
+
+  const remainingSeconds = Math.ceil(Math.max(0, state.rehearsal.nextAdvanceAt - Date.now()) / 1000);
+  return `Auto pacing. Next card in ${formatDurationLabel(remainingSeconds)}. ${cadence} per card.`;
+}
+
+function clearRehearsalAutoTimer() {
+  window.clearInterval(rehearsalAutoTimer);
+  rehearsalAutoTimer = null;
+  state.rehearsal.nextAdvanceAt = 0;
+}
+
+function syncRehearsalAutoTimer(options = {}) {
+  const { timing, reset = false } = options;
+  const shouldRun = (
+    !elements.fullscreenRehearsal.hidden
+    && getEffectiveRehearsalMode(timing) === "auto"
+    && timing.autoAvailable
+    && state.rehearsal.index < timing.bulletCount - 1
+  );
+
+  if (!shouldRun) {
+    clearRehearsalAutoTimer();
+    return;
+  }
+
+  // Reset the next deadline when the user changes cards or mode so each card gets a full interval.
+  if (reset || !state.rehearsal.nextAdvanceAt) {
+    state.rehearsal.nextAdvanceAt = Date.now() + timing.intervalMs;
+  }
+
+  if (!rehearsalAutoTimer) {
+    rehearsalAutoTimer = window.setInterval(tickRehearsalAutoTimer, REHEARSAL_TIMER_TICK_MS);
+  }
+}
+
+function updateRehearsalTimerStatus(timing) {
+  elements.fullscreenTimerStatus.textContent = getRehearsalTimerStatus(timing);
+}
+
+function tickRehearsalAutoTimer() {
+  if (elements.fullscreenRehearsal.hidden) {
+    clearRehearsalAutoTimer();
+    return;
+  }
+
+  const { speech, version } = getRehearsalVersion();
+  const bullets = version?.rehearsalBullets || [];
+  const timing = getRehearsalTiming(version, bullets);
+
+  if (!speech || !version || getEffectiveRehearsalMode(timing) !== "auto" || !timing.autoAvailable) {
+    clearRehearsalAutoTimer();
+    updateRehearsalTimerStatus(timing);
+    return;
+  }
+
+  if (state.rehearsal.index >= bullets.length - 1) {
+    clearRehearsalAutoTimer();
+    updateRehearsalTimerStatus(timing);
+    return;
+  }
+
+  if (!state.rehearsal.nextAdvanceAt) {
+    state.rehearsal.nextAdvanceAt = Date.now() + timing.intervalMs;
+  }
+
+  if (Date.now() >= state.rehearsal.nextAdvanceAt) {
+    state.rehearsal.index = Math.min(state.rehearsal.index + 1, bullets.length - 1);
+    renderRehearsalScreen({ resetAutoTimer: true });
+    return;
+  }
+
+  updateRehearsalTimerStatus(timing);
+}
+
+function setRehearsalMode(mode, options = {}) {
+  const nextMode = mode === "auto" ? "auto" : "manual";
+  state.rehearsal.mode = nextMode;
+
+  if (elements.fullscreenRehearsal.hidden) {
+    clearRehearsalAutoTimer();
+    renderApp();
+    return;
+  }
+
+  renderRehearsalScreen({ resetAutoTimer: options.resetTimer !== false });
 }
 
 function defaultVersionLabel(status) {
@@ -2694,13 +2881,20 @@ function renderRunsTab(speech) {
 function renderRehearsalTab(speech) {
   const version = getSelectedVersionForSpeech(speech);
   const bullets = version?.rehearsalBullets || [];
+  const timing = getRehearsalTiming(version, bullets);
   const leftTitle = speech.status === "idea" ? "Idea Prompts" : "Rehearsal Bullets";
   const rightTitle = speech.status === "idea" ? "Prompt View" : "Fullscreen Rehearsal";
-  const buttonLabel = speech.status === "idea" ? "Open Prompt View" : "Start Fullscreen Rehearsal";
+  const buttonLabel = speech.status === "idea"
+    ? "Open Prompt View"
+    : (getEffectiveRehearsalMode(timing) === "auto" ? "Start Timed Rehearsal" : "Start Fullscreen Rehearsal");
   const editLabel = speech.status === "idea" ? "Edit Note" : "Edit Bullets";
   const launchCopy = speech.status === "idea"
     ? "Open one prompt at a time in a clean fullscreen view."
     : "Open a larger cue card. Tap the right side to advance and the left side to go back.";
+  const targetText = version ? `${version.estimatedMinutes} min` : "-";
+  const cadenceText = timing.autoAvailable
+    ? `${formatDurationLabel(timing.intervalMs / 1000)} / card`
+    : "Set target minutes";
 
   return `
     <div class="two-up rehearsal-layout">
@@ -2731,6 +2925,15 @@ function renderRehearsalTab(speech) {
           <h4>${rightTitle}</h4>
           <span class="meta-chip">${version?.label || "No version"}</span>
         </div>
+        <div class="rehearsal-pacing-panel">
+          <div class="rehearsal-pacing-head">
+            <div>
+              <strong>Pacing</strong>
+              <p class="helper-copy rehearsal-pacing-copy">${escapeHtml(getRehearsalTimingSummary(timing))}</p>
+            </div>
+            ${renderRehearsalModeToggle(timing)}
+          </div>
+        </div>
         <div class="rehearsal-launch-actions">
           <button class="primary-button rehearsal-launch-button" type="button" data-action="start-rehearsal">${buttonLabel}</button>
           <p class="helper-copy rehearsal-launch-copy">${launchCopy}</p>
@@ -2746,7 +2949,11 @@ function renderRehearsalTab(speech) {
           </div>
           <div class="info-row">
             <strong>Target</strong>
-            <span>${version?.estimatedMinutes || "-"} min</span>
+            <span>${escapeHtml(targetText)}</span>
+          </div>
+          <div class="info-row">
+            <strong>Cadence</strong>
+            <span>${escapeHtml(cadenceText)}</span>
           </div>
         </div>
       </div>
@@ -4362,10 +4569,11 @@ function openRehearsal() {
   state.rehearsal.versionId = version.id;
   state.rehearsal.index = 0;
   elements.fullscreenRehearsal.hidden = false;
-  renderRehearsalScreen();
+  renderRehearsalScreen({ resetAutoTimer: true });
 }
 
 function closeRehearsal() {
+  clearRehearsalAutoTimer();
   elements.fullscreenRehearsal.hidden = true;
 }
 
@@ -4375,7 +4583,8 @@ function getRehearsalVersion() {
   return { speech, version };
 }
 
-function renderRehearsalScreen() {
+function renderRehearsalScreen(options = {}) {
+  const { resetAutoTimer = false } = options;
   const { speech, version } = getRehearsalVersion();
   const bullets = version?.rehearsalBullets || [];
 
@@ -4387,17 +4596,27 @@ function renderRehearsalScreen() {
   const index = Math.max(0, Math.min(state.rehearsal.index, bullets.length - 1));
   state.rehearsal.index = index;
 
+  const timing = getRehearsalTiming(version, bullets);
   const progress = ((index + 1) / bullets.length) * 100;
   const nearEnd = bullets.length > 1 && index >= Math.max(1, bullets.length - Math.ceil(bullets.length * 0.25));
+  const fullscreenTitle = speech.goal
+    ? `Bullet rehearsal · ${speech.goal}`
+    : "Bullet rehearsal";
 
   elements.fullscreenType.textContent = `${speech.title} · ${version.label}`;
-  elements.fullscreenTitle.textContent = `Bullet rehearsal · ${speech.goal}`;
+  elements.fullscreenTitle.textContent = fullscreenTitle;
+  elements.fullscreenModeToggle.innerHTML = renderRehearsalModeToggle(timing, {
+    ariaLabel: "Fullscreen rehearsal pacing mode",
+    extraClassName: "fullscreen-mode-toggle",
+  });
   elements.fullscreenBullet.textContent = bullets[index];
   elements.fullscreenProgress.style.width = `${progress}%`;
   elements.fullscreenProgress.dataset.nearEnd = String(nearEnd);
   elements.fullscreenCounter.textContent = `${index + 1} / ${bullets.length}`;
   elements.prevBulletButton.disabled = index === 0;
   elements.nextBulletButton.disabled = index === bullets.length - 1;
+  syncRehearsalAutoTimer({ timing, reset: resetAutoTimer });
+  updateRehearsalTimerStatus(timing);
 }
 
 async function selectSpeech(speechId, options = {}) {
@@ -4600,7 +4819,7 @@ function nextRehearsalBullet() {
   const bullets = version?.rehearsalBullets || [];
   if (!bullets.length) return;
   state.rehearsal.index = Math.min(state.rehearsal.index + 1, bullets.length - 1);
-  renderRehearsalScreen();
+  renderRehearsalScreen({ resetAutoTimer: true });
 }
 
 function prevRehearsalBullet() {
@@ -4608,7 +4827,7 @@ function prevRehearsalBullet() {
   const bullets = version?.rehearsalBullets || [];
   if (!bullets.length) return;
   state.rehearsal.index = Math.max(state.rehearsal.index - 1, 0);
-  renderRehearsalScreen();
+  renderRehearsalScreen({ resetAutoTimer: true });
 }
 
 function handleFullscreenBodyClick(event) {
@@ -4775,6 +4994,12 @@ elements.detailActionRow.addEventListener("click", (event) => {
 });
 
 elements.tabContent.addEventListener("click", (event) => {
+  const modeButton = event.target.closest("[data-rehearsal-mode]");
+  if (modeButton) {
+    setRehearsalMode(modeButton.dataset.rehearsalMode);
+    return;
+  }
+
   const versionButton = event.target.closest("[data-version-id]");
   if (versionButton) {
     state.selectedVersionId = versionButton.dataset.versionId;
@@ -4859,6 +5084,14 @@ elements.copyEditorButton.addEventListener("click", () => {
 });
 
 elements.editorForm.addEventListener("submit", saveEditor);
+
+elements.fullscreenRehearsal.addEventListener("click", (event) => {
+  const modeButton = event.target.closest("[data-rehearsal-mode]");
+  if (!modeButton) return;
+
+  event.stopPropagation();
+  setRehearsalMode(modeButton.dataset.rehearsalMode);
+});
 
 elements.fullscreenBody.addEventListener("click", handleFullscreenBodyClick);
 

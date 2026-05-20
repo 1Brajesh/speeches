@@ -88,6 +88,7 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
   - the speech is still `idea`
   - the run result is `scheduled`
 - Rehearsal mode shows one bullet at a time.
+- Rehearsal now supports optional auto-advance pacing based on the selected version's `Target Minutes`, splitting the total time evenly across the current rehearsal bullets.
 - Rehearsal navigation:
   - right-side click/tap or `Space` / right arrow = next
   - left-side click/tap or left arrow = previous
@@ -131,6 +132,7 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
   - `Edit Script` speech body auto-sizes to content in the editor.
   - the `Versions` tab uses page-length scrolling, keeps `Version History` always visible, and lets the selected speech body expand to the full draft length instead of sitting inside a compact inner scroller.
   - the `Runs` tab also uses page-length scrolling so the selected run detail continues through `Learnings`, `Evaluator Notes`, and `Next Time` without an abrupt cutoff.
+  - the `Rehearsal` workspace can now run in `Manual` or `Auto` pacing mode, with auto-advance using the selected version's target minutes to calculate equal per-card timing plus a live countdown in fullscreen mode.
   - `Edit Script` pills are green-themed.
   - `Edit Meta` pills are pink-themed.
 

@@ -834,6 +834,43 @@
       align-content: start;
     }
 
+    .rehearsal-pacing-panel {
+      display: grid;
+      gap: 10px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+
+    .rehearsal-pacing-head {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .rehearsal-pacing-head strong {
+      display: block;
+      font-size: 0.82rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--faint);
+    }
+
+    .rehearsal-pacing-copy {
+      margin: 6px 0 0;
+      max-width: 42ch;
+    }
+
+    .rehearsal-mode-toggle {
+      justify-content: flex-end;
+    }
+
+    .rehearsal-mode-toggle .tab-pill[disabled] {
+      opacity: 0.46;
+      cursor: not-allowed;
+    }
+
     .rehearsal-launch-button {
       width: fit-content;
       max-width: 100%;
@@ -2072,6 +2109,51 @@
       padding: 20px 24px;
     }
 
+    .fullscreen-meta {
+      display: grid;
+      gap: 8px;
+    }
+
+    .fullscreen-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    .fullscreen-mode-toggle {
+      justify-content: flex-end;
+    }
+
+    .fullscreen-mode-toggle .tab-pill {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: rgba(255, 255, 255, 0.12);
+      color: #ece7de;
+      box-shadow: none;
+    }
+
+    .fullscreen-mode-toggle .tab-pill:hover,
+    .fullscreen-mode-toggle .tab-pill:focus-visible {
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+    }
+
+    .fullscreen-mode-toggle .tab-pill[aria-pressed="true"] {
+      background: rgba(123, 183, 255, 0.14);
+      border-color: rgba(123, 183, 255, 0.34);
+      color: #ddecff;
+    }
+
+    .fullscreen-mode-toggle .tab-pill[disabled] {
+      opacity: 0.42;
+      cursor: not-allowed;
+    }
+
+    .fullscreen-timer-status {
+      margin: 0;
+      max-width: 52ch;
+    }
+
     .fullscreen-body {
       display: grid;
       place-items: center;
@@ -2197,6 +2279,16 @@
         grid-template-columns: 1fr;
       }
 
+      .fullscreen-bar,
+      .fullscreen-footer {
+        align-items: start;
+        flex-direction: column;
+      }
+
+      .fullscreen-controls {
+        width: 100%;
+        justify-content: space-between;
+      }
     }
 
     @media (max-width: 620px) {
@@ -2378,14 +2470,18 @@
 
   <section class="fullscreen" id="fullscreenRehearsal" hidden>
     <div class="fullscreen-bar">
-      <div>
+      <div class="fullscreen-meta">
         <div class="eyebrow" id="fullscreenType">Rehearsal</div>
         <p class="fullscreen-hint" id="fullscreenTitle">Speech title</p>
+        <p class="fullscreen-hint fullscreen-timer-status" id="fullscreenTimerStatus">Manual pacing.</p>
       </div>
-      <div class="button-row">
-        <button class="ghost-button" type="button" id="prevBulletButton">Previous</button>
-        <button class="ghost-button" type="button" id="nextBulletButton">Next</button>
-        <button class="primary-button" type="button" id="exitFullscreenButton">Exit</button>
+      <div class="fullscreen-controls">
+        <div id="fullscreenModeToggle"></div>
+        <div class="button-row">
+          <button class="ghost-button" type="button" id="prevBulletButton">Previous</button>
+          <button class="ghost-button" type="button" id="nextBulletButton">Next</button>
+          <button class="primary-button" type="button" id="exitFullscreenButton">Exit</button>
+        </div>
       </div>
     </div>
 
@@ -2407,6 +2503,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260519f"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260520a"></script>
 </body>
 </html>
