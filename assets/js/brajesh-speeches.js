@@ -75,6 +75,7 @@ let ideaDeleteBusy = false;
 let speechDeleteBusy = false;
 let versionDeleteBusy = false;
 let playbookDeleteBusy = false;
+const speechDetailPromises = new Map();
 
 const elements = {
   pageStatus: document.querySelector("#pageStatus"),
@@ -228,6 +229,7 @@ function resetSpeechState() {
   state.ideas = [];
   state.speeches = [];
   state.playbookEntries = [];
+  speechDetailPromises.clear();
   state.workspaceView = "speeches";
   state.selectedIdeaId = null;
   state.selectedSpeechId = null;
@@ -606,7 +608,46 @@ function ensureTextArray(value) {
     : [];
 }
 
-function mapSpeechData(speechRows, versionRows, runRows) {
+function createSpeechSearchText({ title = "", coreIdea = "", goal = "", tags = [], notes = "" }) {
+  return [
+    title,
+    coreIdea,
+    goal,
+    Array.isArray(tags) ? tags.join(" ") : "",
+    notes,
+  ].join(" ").toLowerCase();
+}
+
+function mapSpeechSummaries(speechRows, versionRows, runRows) {
+  const versionCounts = new Map();
+  const runSummaries = new Map();
+
+  (versionRows || []).forEach((row) => {
+    const speechId = row.speech_id;
+    versionCounts.set(speechId, (versionCounts.get(speechId) || 0) + 1);
+  });
+
+  (runRows || []).forEach((row) => {
+    const speechId = row.speech_id;
+    const existing = runSummaries.get(speechId) || {
+      count: 0,
+      latestDeliveryAt: "",
+      latestDeliveryEventLevel: "",
+      latestSortValue: 0,
+    };
+    const sortValue = timestampMs(row.delivered_at || row.created_at || "");
+
+    existing.count += 1;
+
+    if (!existing.latestDeliveryAt || sortValue >= existing.latestSortValue) {
+      existing.latestDeliveryAt = row.delivered_at || "";
+      existing.latestDeliveryEventLevel = row.event_level || "";
+      existing.latestSortValue = sortValue;
+    }
+
+    runSummaries.set(speechId, existing);
+  });
+
   const speeches = (speechRows || []).map((row) => ({
     id: row.id,
     title: row.title || "Untitled Speech",
@@ -618,71 +659,151 @@ function mapSpeechData(speechRows, versionRows, runRows) {
     activeVersionId: row.active_version_id || null,
     createdAt: row.created_at || "",
     updatedAt: row.updated_at || row.created_at || "",
+    versionCount: versionCounts.get(row.id) || 0,
+    deliveryCount: runSummaries.get(row.id)?.count || 0,
+    latestDeliveryAt: runSummaries.get(row.id)?.latestDeliveryAt || "",
+    latestDeliveryEventLevel: runSummaries.get(row.id)?.latestDeliveryEventLevel || "",
+    searchText: createSpeechSearchText({
+      title: row.title || "",
+      coreIdea: row.core_idea || "",
+      goal: row.goal || "",
+      tags: ensureTextArray(row.tags),
+      notes: row.notes || "",
+    }),
     versions: [],
     deliveries: [],
+    detailLoaded: false,
+    detailLoading: false,
+    detailError: "",
   }));
-
-  const bySpeechId = new Map(speeches.map((speech) => [speech.id, speech]));
-
-  (versionRows || []).forEach((row) => {
-    const speech = bySpeechId.get(row.speech_id);
-    if (!speech) return;
-
-    speech.versions.push({
-      id: row.id,
-      label: row.label || "Untitled Version",
-      basedOn: row.based_on_version_id || null,
-      estimatedMinutes: row.estimated_minutes || 0,
-      updatedAt: row.updated_at || row.created_at || "",
-      revisionNote: row.revision_note || "",
-      speechBody: row.speech_body || "",
-      rehearsalBullets: ensureTextArray(row.rehearsal_bullets),
-    });
-  });
-
-  (runRows || []).forEach((row) => {
-    const speech = bySpeechId.get(row.speech_id);
-    if (!speech) return;
-
-    speech.deliveries.push({
-      id: row.id,
-      versionId: row.version_id || null,
-      deliveredAt: row.delivered_at || "",
-      location: row.location || "",
-      city: row.city || "",
-      program: row.program || "",
-      eventLevel: row.event_level || "",
-      speechStyle: row.speech_style || "",
-      audience: row.audience || "",
-      result: row.result || "",
-      actualMinutes: row.actual_minutes || "-",
-      feedback: {
-        whatWorked: row.what_worked || "",
-        whatMissed: row.what_missed || "",
-        learnings: row.learnings || "",
-        evaluatorNotes: ensureTextArray(row.evaluator_notes),
-        nextActions: ensureTextArray(row.next_actions),
-      },
-    });
-  });
-
-  speeches.forEach((speech) => {
-    speech.versions.sort((a, b) => {
-      const timeA = timestampMs(a.updatedAt);
-      const timeB = timestampMs(b.updatedAt);
-      return timeA - timeB;
-    });
-
-    if (!speech.activeVersionId && speech.versions.length) {
-      speech.activeVersionId = speech.versions[speech.versions.length - 1].id;
-    }
-  });
 
   return speeches.sort((a, b) => {
     const timeA = timestampMs(a.updatedAt || a.createdAt);
     const timeB = timestampMs(b.updatedAt || b.createdAt);
     return timeB - timeA;
   });
+}
+
+function buildSpeechVersions(versionRows) {
+  const versions = (versionRows || []).map((row) => ({
+    id: row.id,
+    label: row.label || "Untitled Version",
+    basedOn: row.based_on_version_id || null,
+    estimatedMinutes: row.estimated_minutes || 0,
+    updatedAt: row.updated_at || row.created_at || "",
+    revisionNote: row.revision_note || "",
+    speechBody: row.speech_body || "",
+    rehearsalBullets: ensureTextArray(row.rehearsal_bullets),
+  }));
+
+  versions.sort((a, b) => timestampMs(a.updatedAt) - timestampMs(b.updatedAt));
+  return versions;
+}
+
+function buildSpeechDeliveries(runRows) {
+  return (runRows || []).map((row) => ({
+    id: row.id,
+    versionId: row.version_id || null,
+    deliveredAt: row.delivered_at || "",
+    location: row.location || "",
+    city: row.city || "",
+    program: row.program || "",
+    eventLevel: row.event_level || "",
+    speechStyle: row.speech_style || "",
+    audience: row.audience || "",
+    result: row.result || "",
+    actualMinutes: row.actual_minutes || "-",
+    feedback: {
+      whatWorked: row.what_worked || "",
+      whatMissed: row.what_missed || "",
+      learnings: row.learnings || "",
+      evaluatorNotes: ensureTextArray(row.evaluator_notes),
+      nextActions: ensureTextArray(row.next_actions),
+    },
+  }));
+}
+
+function applySpeechDetail(speechId, versionRows, runRows) {
+  const speech = getSpeechById(speechId);
+  if (!speech) return null;
+
+  speech.versions = buildSpeechVersions(versionRows);
+  speech.deliveries = buildSpeechDeliveries(runRows);
+  speech.versionCount = speech.versions.length;
+  speech.deliveryCount = speech.deliveries.length;
+
+  if (!speech.activeVersionId && speech.versions.length) {
+    speech.activeVersionId = speech.versions[speech.versions.length - 1].id;
+  }
+
+  const latestDelivery = sortDeliveries(speech.deliveries)[0];
+  speech.latestDeliveryAt = latestDelivery?.deliveredAt || "";
+  speech.latestDeliveryEventLevel = latestDelivery?.eventLevel || "";
+  speech.detailLoaded = true;
+  speech.detailError = "";
+
+  return speech;
+}
+
+async function loadSpeechDetail(speechId, options = {}) {
+  const { force = false, renderPending = false, renderAfter = true } = options;
+  const speech = getSpeechById(speechId);
+  if (!speech) return null;
+
+  if (speech.detailLoaded && !force) {
+    return speech;
+  }
+
+  const existingPromise = speechDetailPromises.get(speechId);
+  if (existingPromise && !force) {
+    return existingPromise;
+  }
+
+  speech.detailLoading = true;
+  speech.detailError = "";
+
+  if (renderPending) {
+    renderApp();
+  }
+
+  const promise = Promise.all([
+    db
+      .from("brajesh_speech_versions")
+      .select("id, speech_id, based_on_version_id, label, estimated_minutes, revision_note, speech_body, rehearsal_bullets, created_at, updated_at")
+      .eq("speech_id", speechId)
+      .order("created_at", { ascending: true }),
+    db
+      .from("brajesh_speech_runs")
+      .select("id, speech_id, version_id, delivered_at, location, city, program, event_level, speech_style, audience, result, actual_minutes, what_worked, what_missed, learnings, evaluator_notes, next_actions, created_at, updated_at")
+      .eq("speech_id", speechId)
+      .order("delivered_at", { ascending: false })
+      .order("created_at", { ascending: false }),
+  ]).then(([versionResult, runResult]) => {
+    if (versionResult.error) throw versionResult.error;
+    if (runResult.error) throw runResult.error;
+
+    return applySpeechDetail(speechId, versionResult.data, runResult.data);
+  }).catch((error) => {
+    const currentSpeech = getSpeechById(speechId);
+    if (currentSpeech) {
+      currentSpeech.detailError = error.message || "Could not load this speech.";
+    }
+    setPageStatus(error.message || "Could not load that speech.", "error");
+    throw error;
+  }).finally(() => {
+    const currentSpeech = getSpeechById(speechId);
+    if (currentSpeech) {
+      currentSpeech.detailLoading = false;
+    }
+    speechDetailPromises.delete(speechId);
+
+    if (renderAfter) {
+      renderApp();
+    }
+  });
+
+  speechDetailPromises.set(speechId, promise);
+  return promise;
 }
 
 function mapIdeaData(ideaRows) {
@@ -743,11 +864,11 @@ async function loadSpeeches(options = {}) {
       .order("updated_at", { ascending: false }),
     db
       .from("brajesh_speech_versions")
-      .select("id, speech_id, based_on_version_id, label, estimated_minutes, revision_note, speech_body, rehearsal_bullets, created_at, updated_at")
+      .select("id, speech_id")
       .order("created_at", { ascending: true }),
     db
       .from("brajesh_speech_runs")
-      .select("id, speech_id, version_id, delivered_at, location, city, program, event_level, speech_style, audience, result, actual_minutes, what_worked, what_missed, learnings, evaluator_notes, next_actions, created_at, updated_at")
+      .select("id, speech_id, delivered_at, event_level, created_at")
       .order("delivered_at", { ascending: false })
       .order("created_at", { ascending: false }),
     db
@@ -764,8 +885,20 @@ async function loadSpeeches(options = {}) {
   if (playbookResult.error) throw playbookResult.error;
 
   state.ideas = mapIdeaData(ideaResult.data);
-  state.speeches = mapSpeechData(speechResult.data, versionResult.data, runResult.data);
+  state.speeches = mapSpeechSummaries(speechResult.data, versionResult.data, runResult.data);
   state.playbookEntries = mapPlaybookData(playbookResult.data);
+
+  if (state.workspaceView === "speeches") {
+    const selectedSpeech = ensureSelection();
+    if (selectedSpeech) {
+      try {
+        await loadSpeechDetail(selectedSpeech.id, { renderAfter: false });
+      } catch {
+        // Keep the library usable even if the selected speech detail fails to load.
+      }
+    }
+  }
+
   showApp();
   renderApp();
 
@@ -1119,17 +1252,7 @@ function getFilteredSpeeches() {
       return true;
     }
 
-    const haystack = [
-      speech.title,
-      speech.coreIdea,
-      speech.goal,
-      speech.tags.join(" "),
-      speech.notes,
-      ...speech.versions.map((version) => `${version.label} ${version.speechBody} ${version.revisionNote} ${version.rehearsalBullets.join(" ")}`),
-      ...speech.deliveries.map((delivery) => `${delivery.location} ${delivery.city} ${delivery.program} ${delivery.eventLevel} ${delivery.speechStyle}`),
-    ].join(" ").toLowerCase();
-
-    return haystack.includes(query);
+    return (speech.searchText || "").includes(query);
   });
 }
 
@@ -1263,6 +1386,46 @@ function getSelectedDeliveryForSpeech(speech) {
   if (explicit) return explicit;
 
   return sortDeliveries(speech.deliveries)[0];
+}
+
+function getSpeechVersionCount(speech) {
+  if (!speech) return 0;
+  return speech.detailLoaded ? speech.versions.length : (speech.versionCount || 0);
+}
+
+function getSpeechDeliveryCount(speech) {
+  if (!speech) return 0;
+  return speech.detailLoaded ? speech.deliveries.length : (speech.deliveryCount || 0);
+}
+
+function getSpeechLatestDeliverySummary(speech) {
+  if (!speech) return null;
+
+  if (speech.detailLoaded) {
+    const latestDelivery = sortDeliveries(speech.deliveries)[0];
+    if (latestDelivery) {
+      return {
+        deliveredAt: latestDelivery.deliveredAt,
+        eventLevel: latestDelivery.eventLevel,
+      };
+    }
+  }
+
+  if (!speech.latestDeliveryAt) {
+    return null;
+  }
+
+  return {
+    deliveredAt: speech.latestDeliveryAt,
+    eventLevel: speech.latestDeliveryEventLevel || "",
+  };
+}
+
+function getSpeechLatestRunLine(speech) {
+  const latestDelivery = getSpeechLatestDeliverySummary(speech);
+  return latestDelivery
+    ? `Latest run: ${formatDate(latestDelivery.deliveredAt)}${latestDelivery.eventLevel ? ` · ${latestDelivery.eventLevel}` : ""}`
+    : "No runs logged yet.";
 }
 
 function getLatestVersionForSpeech(speech, excludeVersionId = "") {
@@ -1420,7 +1583,7 @@ function renderCounts() {
 
   const total = state.speeches.length;
   const inProgress = state.speeches.filter((speech) => ["idea", "draft", "rehearsal_ready"].includes(speech.status)).length;
-  const delivered = state.speeches.filter((speech) => speech.deliveries.length > 0).length;
+  const delivered = state.speeches.filter((speech) => getSpeechDeliveryCount(speech) > 0).length;
 
   elements.totalCount.textContent = `${total} speeches`;
   elements.draftCount.textContent = `${inProgress} in progress`;
@@ -1826,23 +1989,18 @@ function renderSpeechList() {
   }
 
   elements.speechList.innerHTML = filtered.map((speech) => {
-    const latestDelivery = sortDeliveries(speech.deliveries)[0];
-    const latestRunLine = latestDelivery
-      ? `Latest run: ${formatDate(latestDelivery.deliveredAt)}${latestDelivery.eventLevel ? ` · ${latestDelivery.eventLevel}` : ""}`
-      : "No runs logged yet.";
-
     return `
       <button class="speech-card" type="button" data-speech-id="${speech.id}" aria-pressed="${String(selected?.id === speech.id)}">
         <div class="meta-row">
           <span class="status-chip" data-status="${speech.status}">${statusLabel(speech.status)}</span>
-          <span class="meta-chip">${speech.versions.length} ${speech.versions.length === 1 ? "version" : "versions"}</span>
+          <span class="meta-chip">${getSpeechVersionCount(speech)} ${getSpeechVersionCount(speech) === 1 ? "version" : "versions"}</span>
         </div>
         <h3>${displayText(speech.title)}</h3>
         <p>${displayText(excerpt(speech.coreIdea, 120), "No core idea yet.")}</p>
         <div class="tag-row">
           ${renderTagChips(speech.tags.slice(0, 3))}
         </div>
-        <p>${displayText(latestRunLine)}</p>
+        <p>${displayText(getSpeechLatestRunLine(speech))}</p>
       </button>
     `;
   }).join("");
@@ -1871,14 +2029,16 @@ function renderSpeechDetail(speech) {
     return;
   }
 
-  const version = getSelectedVersionForSpeech(speech);
+  const detailLoaded = Boolean(speech.detailLoaded);
+  const version = detailLoaded ? getSelectedVersionForSpeech(speech) : null;
+  const deliveryCount = getSpeechDeliveryCount(speech);
 
-  elements.speechMode.textContent = speech.deliveries.length ? "Speech + Run History" : "Speech in Progress";
+  elements.speechMode.textContent = deliveryCount ? "Speech + Run History" : "Speech in Progress";
   elements.speechTitle.textContent = speech.title;
   elements.speechStatusChip.textContent = statusLabel(speech.status);
   elements.speechStatusChip.dataset.status = speech.status;
   elements.speechGoalChip.textContent = speech.goal || "No goal yet";
-  elements.speechCountChip.textContent = `${speech.deliveries.length} ${speech.deliveries.length === 1 ? "run" : "runs"}`;
+  elements.speechCountChip.textContent = `${deliveryCount} ${deliveryCount === 1 ? "run" : "runs"}`;
   elements.speechIdea.textContent = speech.coreIdea || "No core idea yet.";
   elements.speechTags.innerHTML = renderTagChips(speech.tags);
   renderDetailActions(speech);
@@ -1920,6 +2080,26 @@ function syncHeaderActions() {
 }
 
 function renderFocusCard(speech, version) {
+  if (!speech.detailLoaded) {
+    const detailStatus = speech.detailError
+      ? "Could not load full speech detail."
+      : (speech.detailLoading ? "Loading versions, runs, and rehearsal cues..." : "Loading full speech detail...");
+
+    elements.focusCard.innerHTML = `
+      <div class="focus-block" data-size="wide">
+        <strong>Speech Detail</strong>
+        <p>${displayText(detailStatus)}</p>
+        <span class="helper-copy">${getSpeechVersionCount(speech)} versions · ${getSpeechDeliveryCount(speech)} runs</span>
+      </div>
+      <div class="focus-block">
+        <strong>Latest Run</strong>
+        <p>${displayText(getSpeechLatestRunLine(speech))}</p>
+        <span class="helper-copy">${speech.detailError ? "Try opening the speech again to reload it." : "Full version history loads only for the selected speech."}</span>
+      </div>
+    `;
+    return;
+  }
+
   const delivery = getSelectedDeliveryForSpeech(speech);
   const revisionNote = version?.revisionNote || "No revision note yet.";
   const nextMove = speech.notes || delivery?.feedback?.nextActions?.[0] || "No next move yet.";
@@ -1994,6 +2174,24 @@ function renderTabContent(speech) {
 
   if (!speech) {
     elements.tabContent.innerHTML = '<div class="empty-state">No speech selected.</div>';
+    return;
+  }
+
+  if (!speech.detailLoaded) {
+    if (!speech.detailLoading && !speech.detailError) {
+      void loadSpeechDetail(speech.id);
+    }
+
+    elements.tabContent.innerHTML = speech.detailError
+      ? `
+        <div class="empty-state">
+          <p>Could not load the full speech detail.</p>
+          <div class="button-row" style="justify-content: center; margin-top: 12px;">
+            <button class="ghost-button" type="button" data-action="reload-speech-detail">Try Again</button>
+          </div>
+        </div>
+      `
+      : '<div class="empty-state">Loading versions, runs, and rehearsal detail for this speech.</div>';
     return;
   }
 
@@ -3848,8 +4046,10 @@ async function deleteSpeech() {
   }
 
   const speechLabel = speech.status === "idea" ? "idea" : "speech";
-  const versionLabel = `${speech.versions.length} ${speech.versions.length === 1 ? "version" : "versions"}`;
-  const runLabel = `${speech.deliveries.length} ${speech.deliveries.length === 1 ? "run" : "runs"}`;
+  const versionCount = getSpeechVersionCount(speech);
+  const deliveryCount = getSpeechDeliveryCount(speech);
+  const versionLabel = `${versionCount} ${versionCount === 1 ? "version" : "versions"}`;
+  const runLabel = `${deliveryCount} ${deliveryCount === 1 ? "run" : "runs"}`;
   const confirmed = window.confirm(
     `Delete "${speech.title}"?\n\nThis will permanently remove the ${speechLabel}, ${versionLabel}, and ${runLabel}.`,
   );
@@ -4069,10 +4269,57 @@ function renderRehearsalScreen() {
   elements.nextBulletButton.disabled = index === bullets.length - 1;
 }
 
-function runAction(action) {
+async function selectSpeech(speechId, options = {}) {
+  const { renderPending = true } = options;
+
+  state.selectedSpeechId = speechId;
+  state.selectedVersionId = null;
+  state.selectedDeliveryId = null;
+  renderApp();
+
+  try {
+    await loadSpeechDetail(speechId, { renderPending });
+  } catch {
+    // The detail pane renders the error state; leave the selection in place.
+  }
+}
+
+async function runAction(action) {
   const idea = ensureIdeaSelection();
-  const speech = ensureSelection();
+  let speech = ensureSelection();
   const playbookEntry = ensurePlaybookSelection();
+
+  const needsSpeechDetail = [
+    "reload-speech-detail",
+    "edit-speech",
+    "edit-version",
+    "edit-version-bullets",
+    "new-version",
+    "toggle-version-compare",
+    "delete-version",
+    "new-delivery",
+    "edit-delivery",
+    "start-rehearsal",
+  ].includes(action);
+
+  if (needsSpeechDetail) {
+    if (!speech) {
+      return;
+    }
+
+    try {
+      speech = await loadSpeechDetail(speech.id, {
+        force: action === "reload-speech-detail",
+        renderPending: action !== "reload-speech-detail",
+      });
+    } catch {
+      return;
+    }
+
+    if (!speech) {
+      return;
+    }
+  }
 
   if (action === "new-idea") {
     openIdeaEditor();
@@ -4103,6 +4350,10 @@ function runAction(action) {
     return;
   }
 
+  if (action === "reload-speech-detail") {
+    return;
+  }
+
   if (action === "edit-idea" && idea) {
     state.workspaceView = "ideas";
     openIdeaEditor({ ideaId: idea.id });
@@ -4122,10 +4373,7 @@ function runAction(action) {
     }
 
     state.workspaceView = "speeches";
-    state.selectedSpeechId = linkedSpeech.id;
-    state.selectedVersionId = null;
-    state.selectedDeliveryId = null;
-    renderApp();
+    void selectSpeech(linkedSpeech.id);
     return;
   }
 
@@ -4294,11 +4542,11 @@ elements.logoutButton.addEventListener("click", () => {
 
 elements.workspaceToggleButton.addEventListener("click", () => {
   if (state.workspaceView === "speeches") {
-    runAction("show-playbook");
+    void runAction("show-playbook");
     return;
   }
 
-  runAction("show-speeches");
+  void runAction("show-speeches");
 });
 
 elements.searchInput.addEventListener("input", () => {
@@ -4328,29 +4576,29 @@ elements.filterBar.addEventListener("click", (event) => {
 
 elements.newIdeaButton.addEventListener("click", () => {
   if (state.workspaceView === "speeches") {
-    runAction("new-idea");
+    void runAction("new-idea");
     return;
   }
 
   if (state.workspaceView === "ideas") {
-    runAction("show-playbook");
+    void runAction("show-playbook");
     return;
   }
 
-  runAction("show-ideas");
+  void runAction("show-ideas");
 });
 
 elements.newSpeechButton.addEventListener("click", () => {
   if (state.workspaceView === "ideas") {
-    runAction("new-idea");
+    void runAction("new-idea");
     return;
   }
 
-  runAction("new-speech");
+  void runAction("new-speech");
 });
 
 elements.newPlaybookButton.addEventListener("click", () => {
-  runAction("new-playbook");
+  void runAction("new-playbook");
 });
 
 elements.speechList.addEventListener("click", (event) => {
@@ -4375,10 +4623,7 @@ elements.speechList.addEventListener("click", (event) => {
   const button = event.target.closest("[data-speech-id]");
   if (!button) return;
 
-  state.selectedSpeechId = button.dataset.speechId;
-  state.selectedVersionId = null;
-  state.selectedDeliveryId = null;
-  renderApp();
+  void selectSpeech(button.dataset.speechId);
 });
 
 elements.tabBar.addEventListener("click", (event) => {
@@ -4393,7 +4638,7 @@ elements.detailActionRow.addEventListener("click", (event) => {
   const button = event.target.closest("[data-action]");
   if (!button) return;
 
-  runAction(button.dataset.action);
+  void runAction(button.dataset.action);
 });
 
 elements.tabContent.addEventListener("click", (event) => {
@@ -4413,7 +4658,7 @@ elements.tabContent.addEventListener("click", (event) => {
 
   const actionButton = event.target.closest("[data-action]");
   if (actionButton) {
-    runAction(actionButton.dataset.action);
+    void runAction(actionButton.dataset.action);
   }
 });
 
