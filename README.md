@@ -132,7 +132,7 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
   - `Edit Script` speech body auto-sizes to content in the editor.
   - the `Versions` tab uses page-length scrolling, keeps `Version History` always visible, and lets the selected speech body expand to the full draft length instead of sitting inside a compact inner scroller.
   - the `Runs` tab also uses page-length scrolling so the selected run detail continues through `Learnings`, `Evaluator Notes`, and `Next Time` without an abrupt cutoff.
-  - the `Rehearsal` workspace can now run in `Manual` or `Auto` pacing mode, with fullscreen rehearsal showing an on-card per-card countdown at top left and a session elapsed timer at top right.
+  - the `Rehearsal` workspace can now run in `Manual` or `Auto` pacing mode, with fullscreen rehearsal showing an on-card per-card timer counting up at top left, a session elapsed timer at top right, and a short `seconds per card` intro cue before auto mode starts.
   - `Edit Script` pills are green-themed.
   - `Edit Meta` pills are pink-themed.
 
@@ -140,7 +140,7 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
 
 - Important: when speeches UI changes appear not to register after deploy, check for stale cached JS.
 - The speeches page currently cache-busts the module URL in `index.html`:
-  - `./assets/js/brajesh-speeches.js?v=20260520b`
+  - `./assets/js/brajesh-speeches.js?v=20260520c`
 - If future speeches JS changes appear missing in production, bump that query-string version.
 
 ## Useful Starting Point

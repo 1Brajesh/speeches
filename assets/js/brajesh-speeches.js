@@ -21,6 +21,7 @@ const SCRIPT_PARAGRAPH_SPACING_MAX = 2.6;
 const SCRIPT_PARAGRAPH_SPACING_STEP = 0.05;
 const SCRIPT_PARAGRAPH_SPACING_DEFAULT = 1.76;
 const REHEARSAL_TIMER_TICK_MS = 250;
+const REHEARSAL_INTRO_DURATION_MS = 1600;
 
 const state = {
   user: null,
@@ -52,6 +53,8 @@ const state = {
     mode: "manual",
     nextAdvanceAt: 0,
     startedAt: 0,
+    cardStartedAt: 0,
+    introEndsAt: 0,
   },
   preferences: {
     scriptTextSize: loadScriptTextSizePreference(),
@@ -261,6 +264,8 @@ function resetSpeechState() {
   state.rehearsal.index = 0;
   state.rehearsal.nextAdvanceAt = 0;
   state.rehearsal.startedAt = 0;
+  state.rehearsal.cardStartedAt = 0;
+  state.rehearsal.introEndsAt = 0;
   closeEditor();
   closeRehearsal();
 }
@@ -592,6 +597,16 @@ function formatElapsedClock(totalSeconds) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+function formatSecondsPerCardLabel(totalSeconds) {
+  const safeSeconds = Math.max(1, Math.round(Number(totalSeconds) || 0));
+
+  if (safeSeconds < 60) {
+    return `${safeSeconds} ${safeSeconds === 1 ? "second" : "seconds"} per card`;
+  }
+
+  return `${formatDurationLabel(safeSeconds)} per card`;
+}
+
 function getRehearsalTiming(version, bullets = version?.rehearsalBullets || []) {
   const bulletCount = Array.isArray(bullets) ? bullets.length : 0;
   const minutes = Math.max(0, Number.parseInt(version?.estimatedMinutes || 0, 10) || 0);
@@ -646,17 +661,21 @@ function getRehearsalTimingSummary(timing) {
   return `Manual pacing is active. Auto would advance every ${cadence} across ${bulletLabel} from a ${targetLabel} target.`;
 }
 
+function isRehearsalIntroActive() {
+  return state.rehearsal.introEndsAt > Date.now();
+}
+
 function getRehearsalCardTimerLabel(timing) {
   if (getEffectiveRehearsalMode(timing) !== "auto" || !timing.autoAvailable) {
     return "Manual";
   }
 
-  if (state.rehearsal.index >= timing.bulletCount - 1) {
-    return "Done";
+  if (isRehearsalIntroActive()) {
+    return "0s";
   }
 
-  const remainingSeconds = Math.ceil(Math.max(0, state.rehearsal.nextAdvanceAt - Date.now()) / 1000);
-  return formatDurationLabel(remainingSeconds);
+  const elapsedCardSeconds = Math.max(0, Math.floor((Date.now() - state.rehearsal.cardStartedAt) / 1000));
+  return formatDurationLabel(elapsedCardSeconds);
 }
 
 function getRehearsalElapsedLabel() {
@@ -672,6 +691,8 @@ function clearRehearsalTickTimer() {
   window.clearInterval(rehearsalTickTimer);
   rehearsalTickTimer = null;
   state.rehearsal.nextAdvanceAt = 0;
+  state.rehearsal.cardStartedAt = 0;
+  state.rehearsal.introEndsAt = 0;
 }
 
 function syncRehearsalTickTimer(options = {}) {
@@ -685,11 +706,18 @@ function syncRehearsalTickTimer(options = {}) {
 
   const autoMode = getEffectiveRehearsalMode(timing) === "auto" && timing.autoAvailable;
   const hasNextCard = state.rehearsal.index < timing.bulletCount - 1;
+  const introActive = isRehearsalIntroActive();
 
-  if (autoMode && hasNextCard && (reset || !state.rehearsal.nextAdvanceAt)) {
+  if (autoMode && !introActive && (reset || !state.rehearsal.cardStartedAt)) {
+    state.rehearsal.cardStartedAt = Date.now();
+  } else if (!autoMode) {
+    state.rehearsal.cardStartedAt = 0;
+  }
+
+  if (autoMode && !introActive && hasNextCard && (reset || !state.rehearsal.nextAdvanceAt)) {
     // Reset the next deadline when the user changes cards or mode so each card gets a full interval.
-    state.rehearsal.nextAdvanceAt = Date.now() + timing.intervalMs;
-  } else if (!autoMode || !hasNextCard) {
+    state.rehearsal.nextAdvanceAt = state.rehearsal.cardStartedAt + timing.intervalMs;
+  } else if (!autoMode || introActive || !hasNextCard) {
     state.rehearsal.nextAdvanceAt = 0;
   }
 
@@ -718,11 +746,32 @@ function tickRehearsalTimer() {
     return;
   }
 
+  if (state.rehearsal.introEndsAt && !isRehearsalIntroActive()) {
+    state.rehearsal.introEndsAt = 0;
+    state.rehearsal.startedAt = Date.now();
+    state.rehearsal.cardStartedAt = 0;
+    renderRehearsalScreen({ resetAutoTimer: true });
+    return;
+  }
+
   const autoMode = getEffectiveRehearsalMode(timing) === "auto" && timing.autoAvailable;
   const hasNextCard = state.rehearsal.index < bullets.length - 1;
+  const introActive = isRehearsalIntroActive();
+
+  if (introActive) {
+    updateRehearsalCardTimers(timing);
+    return;
+  }
+
+  if (!state.rehearsal.startedAt) {
+    state.rehearsal.startedAt = Date.now();
+  }
 
   if (autoMode && hasNextCard && !state.rehearsal.nextAdvanceAt) {
-    state.rehearsal.nextAdvanceAt = Date.now() + timing.intervalMs;
+    if (!state.rehearsal.cardStartedAt) {
+      state.rehearsal.cardStartedAt = Date.now();
+    }
+    state.rehearsal.nextAdvanceAt = state.rehearsal.cardStartedAt + timing.intervalMs;
   }
 
   if (autoMode && hasNextCard && Date.now() >= state.rehearsal.nextAdvanceAt) {
@@ -742,6 +791,13 @@ function setRehearsalMode(mode, options = {}) {
     clearRehearsalTickTimer();
     renderApp();
     return;
+  }
+
+  if (nextMode !== "auto") {
+    state.rehearsal.introEndsAt = 0;
+    if (!state.rehearsal.startedAt) {
+      state.rehearsal.startedAt = Date.now();
+    }
   }
 
   renderRehearsalScreen({ resetAutoTimer: options.resetTimer !== false });
@@ -4574,10 +4630,15 @@ function openRehearsal() {
     return;
   }
 
+  const timing = getRehearsalTiming(version, version.rehearsalBullets || []);
+  const useIntro = getEffectiveRehearsalMode(timing) === "auto" && timing.autoAvailable;
+
   state.rehearsal.speechId = speech.id;
   state.rehearsal.versionId = version.id;
   state.rehearsal.index = 0;
-  state.rehearsal.startedAt = Date.now();
+  state.rehearsal.startedAt = useIntro ? 0 : Date.now();
+  state.rehearsal.cardStartedAt = 0;
+  state.rehearsal.introEndsAt = useIntro ? Date.now() + REHEARSAL_INTRO_DURATION_MS : 0;
   elements.fullscreenRehearsal.hidden = false;
   renderRehearsalScreen({ resetAutoTimer: true });
 }
@@ -4585,6 +4646,8 @@ function openRehearsal() {
 function closeRehearsal() {
   clearRehearsalTickTimer();
   state.rehearsal.startedAt = 0;
+  state.rehearsal.cardStartedAt = 0;
+  state.rehearsal.introEndsAt = 0;
   elements.fullscreenRehearsal.hidden = true;
 }
 
@@ -4610,16 +4673,21 @@ function renderRehearsalScreen(options = {}) {
   const timing = getRehearsalTiming(version, bullets);
   const progress = ((index + 1) / bullets.length) * 100;
   const nearEnd = bullets.length > 1 && index >= Math.max(1, bullets.length - Math.ceil(bullets.length * 0.25));
+  const introActive = isRehearsalIntroActive();
+  const stageCopy = introActive
+    ? formatSecondsPerCardLabel(timing.intervalMs / 1000)
+    : bullets[index];
 
   elements.fullscreenModeToggle.innerHTML = renderRehearsalModeToggle(timing, {
     ariaLabel: "Fullscreen rehearsal pacing mode",
     extraClassName: "fullscreen-mode-toggle",
   });
-  elements.fullscreenBullet.textContent = bullets[index];
+  elements.fullscreenBody.dataset.introActive = String(introActive);
+  elements.fullscreenBullet.textContent = stageCopy;
   elements.fullscreenProgress.style.width = `${progress}%`;
   elements.fullscreenProgress.dataset.nearEnd = String(nearEnd);
-  elements.prevBulletButton.disabled = index === 0;
-  elements.nextBulletButton.disabled = index === bullets.length - 1;
+  elements.prevBulletButton.disabled = introActive || index === 0;
+  elements.nextBulletButton.disabled = introActive || index === bullets.length - 1;
   syncRehearsalTickTimer({ timing, reset: resetAutoTimer });
   updateRehearsalCardTimers(timing);
 }
@@ -4822,7 +4890,7 @@ async function runAction(action) {
 function nextRehearsalBullet() {
   const { version } = getRehearsalVersion();
   const bullets = version?.rehearsalBullets || [];
-  if (!bullets.length) return;
+  if (!bullets.length || isRehearsalIntroActive()) return;
   state.rehearsal.index = Math.min(state.rehearsal.index + 1, bullets.length - 1);
   renderRehearsalScreen({ resetAutoTimer: true });
 }
@@ -4830,7 +4898,7 @@ function nextRehearsalBullet() {
 function prevRehearsalBullet() {
   const { version } = getRehearsalVersion();
   const bullets = version?.rehearsalBullets || [];
-  if (!bullets.length) return;
+  if (!bullets.length || isRehearsalIntroActive()) return;
   state.rehearsal.index = Math.max(state.rehearsal.index - 1, 0);
   renderRehearsalScreen({ resetAutoTimer: true });
 }

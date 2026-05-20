@@ -2192,6 +2192,13 @@
       text-align: center;
     }
 
+    .fullscreen-stage-chip[data-chip="card"] {
+      border-color: rgba(123, 183, 255, 0.38);
+      background: linear-gradient(180deg, rgba(123, 183, 255, 0.32), rgba(63, 111, 156, 0.26));
+      color: #e9f4ff;
+      box-shadow: 0 12px 28px rgba(47, 82, 126, 0.26);
+    }
+
     .fullscreen-bullet {
       max-width: 18ch;
       max-height: 52vh;
@@ -2202,6 +2209,13 @@
       line-height: 1.16;
       letter-spacing: -0.03em;
       overflow-wrap: anywhere;
+    }
+
+    .fullscreen-body[data-intro-active="true"] .fullscreen-bullet {
+      max-width: 24ch;
+      font-size: clamp(1.8rem, 3.4vw, 3rem);
+      line-height: 1.12;
+      color: #ddecff;
     }
 
     .progress-shell {
@@ -2500,7 +2514,7 @@
     <div class="fullscreen-body" id="fullscreenBody">
       <div class="fullscreen-stage">
         <div class="fullscreen-stage-head" aria-hidden="true">
-          <span class="fullscreen-stage-chip" id="fullscreenCardTimer">Manual</span>
+          <span class="fullscreen-stage-chip" data-chip="card" id="fullscreenCardTimer">Manual</span>
           <span class="fullscreen-stage-chip" id="fullscreenElapsedTimer">0:00</span>
         </div>
         <div class="fullscreen-bullet" id="fullscreenBullet">Bullet</div>
@@ -2518,6 +2532,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260520b"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260520c"></script>
 </body>
 </html>
