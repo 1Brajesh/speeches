@@ -764,6 +764,7 @@
 
     .rehearsal-layout {
       align-items: stretch;
+      grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.82fr);
     }
 
     .reader-stack {
@@ -810,47 +811,37 @@
       align-content: start;
     }
 
-    .rehearsal-actions {
+    .rehearsal-card-footer {
       display: flex;
       flex-direction: column;
       gap: 12px;
       margin-top: auto;
     }
 
-    .rehearsal-actions .script-button,
-    .rehearsal-actions .primary-button {
+    .rehearsal-card-footer .script-button,
+    .rehearsal-card-footer .primary-button {
       width: 100%;
     }
 
-    .rehearsal-launch-button {
-      flex: 1 1 auto;
-      min-height: clamp(220px, 36vh, 420px);
-      padding: 22px 24px;
-      border-radius: 26px;
-      text-align: left;
+    .rehearsal-launch-card {
+      align-self: start;
+    }
+
+    .rehearsal-launch-actions {
       display: grid;
-      gap: 12px;
-      align-content: end;
+      gap: 10px;
+      align-content: start;
     }
 
-    .rehearsal-launch-kicker {
-      font-size: 0.8rem;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      opacity: 0.82;
-    }
-
-    .rehearsal-launch-title {
-      font-family: var(--serif);
-      font-size: clamp(1.8rem, 3vw, 2.6rem);
-      line-height: 0.98;
-      letter-spacing: -0.04em;
+    .rehearsal-launch-button {
+      width: fit-content;
+      max-width: 100%;
+      min-height: 48px;
+      padding: 0 18px;
     }
 
     .rehearsal-launch-copy {
-      line-height: 1.55;
-      color: inherit;
-      opacity: 0.92;
+      max-width: 34ch;
     }
 
     .rehearsal-empty-state {
@@ -2159,7 +2150,7 @@
       }
 
       .rehearsal-layout {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: minmax(0, 1.28fr) minmax(250px, 0.92fr);
       }
 
       .library-rail {
@@ -2203,9 +2194,6 @@
         grid-template-columns: 1fr;
       }
 
-      .rehearsal-launch-button {
-        min-height: 180px;
-      }
     }
 
     @media (max-width: 620px) {
@@ -2416,6 +2404,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260519b"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260519c"></script>
 </body>
 </html>

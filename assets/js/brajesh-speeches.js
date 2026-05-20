@@ -2369,7 +2369,6 @@ function renderRehearsalTab(speech) {
   const rightTitle = speech.status === "idea" ? "Prompt View" : "Fullscreen Rehearsal";
   const buttonLabel = speech.status === "idea" ? "Open Prompt View" : "Start Fullscreen Rehearsal";
   const editLabel = speech.status === "idea" ? "Edit Note" : "Edit Bullets";
-  const launchKicker = speech.status === "idea" ? "Focus prompt mode" : "Cue view";
   const launchCopy = speech.status === "idea"
     ? "Open one prompt at a time in a clean fullscreen view."
     : "Open a larger cue card. Tap the right side to advance and the left side to go back.";
@@ -2393,7 +2392,7 @@ function renderRehearsalTab(speech) {
         ` : `
           <div class="empty-state rehearsal-empty-state">No rehearsal bullets added yet.</div>
         `}
-        <div class="rehearsal-actions">
+        <div class="rehearsal-card-footer">
           <button class="script-button" type="button" data-action="edit-version-bullets">${editLabel}</button>
         </div>
       </div>
@@ -2402,6 +2401,10 @@ function renderRehearsalTab(speech) {
         <div class="panel-head">
           <h4>${rightTitle}</h4>
           <span class="meta-chip">${version?.label || "No version"}</span>
+        </div>
+        <div class="rehearsal-launch-actions">
+          <button class="primary-button rehearsal-launch-button" type="button" data-action="start-rehearsal">${buttonLabel}</button>
+          <p class="helper-copy rehearsal-launch-copy">${launchCopy}</p>
         </div>
         <div class="info-grid">
           <div class="info-row">
@@ -2416,13 +2419,6 @@ function renderRehearsalTab(speech) {
             <strong>Target</strong>
             <span>${version?.estimatedMinutes || "-"} min</span>
           </div>
-        </div>
-        <div class="rehearsal-actions">
-          <button class="primary-button rehearsal-launch-button" type="button" data-action="start-rehearsal">
-            <span class="rehearsal-launch-kicker">${launchKicker}</span>
-            <strong class="rehearsal-launch-title">${buttonLabel}</strong>
-            <span class="rehearsal-launch-copy">${launchCopy}</span>
-          </button>
         </div>
       </div>
     </div>
