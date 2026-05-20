@@ -51,6 +51,7 @@ const state = {
     index: 0,
     mode: "manual",
     nextAdvanceAt: 0,
+    startedAt: 0,
   },
   preferences: {
     scriptTextSize: loadScriptTextSizePreference(),
@@ -85,7 +86,7 @@ let playbookDeleteBusy = false;
 const speechDetailPromises = new Map();
 let speechSearchTimer = null;
 let speechSearchRequestToken = 0;
-let rehearsalAutoTimer = null;
+let rehearsalTickTimer = null;
 
 const elements = {
   pageStatus: document.querySelector("#pageStatus"),
@@ -137,13 +138,11 @@ const elements = {
   saveEditorButton: document.querySelector("#saveEditorButton"),
   fullscreenRehearsal: document.querySelector("#fullscreenRehearsal"),
   fullscreenBody: document.querySelector("#fullscreenBody"),
-  fullscreenType: document.querySelector("#fullscreenType"),
-  fullscreenTitle: document.querySelector("#fullscreenTitle"),
   fullscreenModeToggle: document.querySelector("#fullscreenModeToggle"),
-  fullscreenTimerStatus: document.querySelector("#fullscreenTimerStatus"),
+  fullscreenCardTimer: document.querySelector("#fullscreenCardTimer"),
+  fullscreenElapsedTimer: document.querySelector("#fullscreenElapsedTimer"),
   fullscreenBullet: document.querySelector("#fullscreenBullet"),
   fullscreenProgress: document.querySelector("#fullscreenProgress"),
-  fullscreenCounter: document.querySelector("#fullscreenCounter"),
   prevBulletButton: document.querySelector("#prevBulletButton"),
   nextBulletButton: document.querySelector("#nextBulletButton"),
   exitFullscreenButton: document.querySelector("#exitFullscreenButton"),
@@ -261,6 +260,7 @@ function resetSpeechState() {
   state.rehearsal.versionId = null;
   state.rehearsal.index = 0;
   state.rehearsal.nextAdvanceAt = 0;
+  state.rehearsal.startedAt = 0;
   closeEditor();
   closeRehearsal();
 }
@@ -579,6 +579,19 @@ function formatMinuteLabel(minutes) {
   return `${safeMinutes} ${safeMinutes === 1 ? "min" : "mins"}`;
 }
 
+function formatElapsedClock(totalSeconds) {
+  const safeSeconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const seconds = safeSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
 function getRehearsalTiming(version, bullets = version?.rehearsalBullets || []) {
   const bulletCount = Array.isArray(bullets) ? bullets.length : 0;
   const minutes = Math.max(0, Number.parseInt(version?.estimatedMinutes || 0, 10) || 0);
@@ -633,66 +646,66 @@ function getRehearsalTimingSummary(timing) {
   return `Manual pacing is active. Auto would advance every ${cadence} across ${bulletLabel} from a ${targetLabel} target.`;
 }
 
-function getRehearsalTimerStatus(timing) {
-  if (!timing.bulletCount) {
-    return "No rehearsal bullets available.";
-  }
-
-  if (!timing.autoAvailable) {
-    return "Manual pacing. Set Target Minutes above 0 to enable auto-advance.";
-  }
-
-  const cadence = formatDurationLabel(timing.intervalMs / 1000);
-
-  if (getEffectiveRehearsalMode(timing) !== "auto") {
-    return `Manual pacing. Auto is ready at ${cadence} per card.`;
+function getRehearsalCardTimerLabel(timing) {
+  if (getEffectiveRehearsalMode(timing) !== "auto" || !timing.autoAvailable) {
+    return "Manual";
   }
 
   if (state.rehearsal.index >= timing.bulletCount - 1) {
-    return `Auto pacing complete. Final card stays on screen at ${cadence} per card.`;
+    return "Done";
   }
 
   const remainingSeconds = Math.ceil(Math.max(0, state.rehearsal.nextAdvanceAt - Date.now()) / 1000);
-  return `Auto pacing. Next card in ${formatDurationLabel(remainingSeconds)}. ${cadence} per card.`;
+  return formatDurationLabel(remainingSeconds);
 }
 
-function clearRehearsalAutoTimer() {
-  window.clearInterval(rehearsalAutoTimer);
-  rehearsalAutoTimer = null;
+function getRehearsalElapsedLabel() {
+  if (!state.rehearsal.startedAt) {
+    return "0:00";
+  }
+
+  const elapsedSeconds = (Date.now() - state.rehearsal.startedAt) / 1000;
+  return formatElapsedClock(elapsedSeconds);
+}
+
+function clearRehearsalTickTimer() {
+  window.clearInterval(rehearsalTickTimer);
+  rehearsalTickTimer = null;
   state.rehearsal.nextAdvanceAt = 0;
 }
 
-function syncRehearsalAutoTimer(options = {}) {
+function syncRehearsalTickTimer(options = {}) {
   const { timing, reset = false } = options;
-  const shouldRun = (
-    !elements.fullscreenRehearsal.hidden
-    && getEffectiveRehearsalMode(timing) === "auto"
-    && timing.autoAvailable
-    && state.rehearsal.index < timing.bulletCount - 1
-  );
+  const shouldRun = !elements.fullscreenRehearsal.hidden;
 
   if (!shouldRun) {
-    clearRehearsalAutoTimer();
+    clearRehearsalTickTimer();
     return;
   }
 
-  // Reset the next deadline when the user changes cards or mode so each card gets a full interval.
-  if (reset || !state.rehearsal.nextAdvanceAt) {
+  const autoMode = getEffectiveRehearsalMode(timing) === "auto" && timing.autoAvailable;
+  const hasNextCard = state.rehearsal.index < timing.bulletCount - 1;
+
+  if (autoMode && hasNextCard && (reset || !state.rehearsal.nextAdvanceAt)) {
+    // Reset the next deadline when the user changes cards or mode so each card gets a full interval.
     state.rehearsal.nextAdvanceAt = Date.now() + timing.intervalMs;
+  } else if (!autoMode || !hasNextCard) {
+    state.rehearsal.nextAdvanceAt = 0;
   }
 
-  if (!rehearsalAutoTimer) {
-    rehearsalAutoTimer = window.setInterval(tickRehearsalAutoTimer, REHEARSAL_TIMER_TICK_MS);
+  if (!rehearsalTickTimer) {
+    rehearsalTickTimer = window.setInterval(tickRehearsalTimer, REHEARSAL_TIMER_TICK_MS);
   }
 }
 
-function updateRehearsalTimerStatus(timing) {
-  elements.fullscreenTimerStatus.textContent = getRehearsalTimerStatus(timing);
+function updateRehearsalCardTimers(timing) {
+  elements.fullscreenCardTimer.textContent = getRehearsalCardTimerLabel(timing);
+  elements.fullscreenElapsedTimer.textContent = getRehearsalElapsedLabel();
 }
 
-function tickRehearsalAutoTimer() {
+function tickRehearsalTimer() {
   if (elements.fullscreenRehearsal.hidden) {
-    clearRehearsalAutoTimer();
+    clearRehearsalTickTimer();
     return;
   }
 
@@ -700,29 +713,25 @@ function tickRehearsalAutoTimer() {
   const bullets = version?.rehearsalBullets || [];
   const timing = getRehearsalTiming(version, bullets);
 
-  if (!speech || !version || getEffectiveRehearsalMode(timing) !== "auto" || !timing.autoAvailable) {
-    clearRehearsalAutoTimer();
-    updateRehearsalTimerStatus(timing);
+  if (!speech || !version) {
+    clearRehearsalTickTimer();
     return;
   }
 
-  if (state.rehearsal.index >= bullets.length - 1) {
-    clearRehearsalAutoTimer();
-    updateRehearsalTimerStatus(timing);
-    return;
-  }
+  const autoMode = getEffectiveRehearsalMode(timing) === "auto" && timing.autoAvailable;
+  const hasNextCard = state.rehearsal.index < bullets.length - 1;
 
-  if (!state.rehearsal.nextAdvanceAt) {
+  if (autoMode && hasNextCard && !state.rehearsal.nextAdvanceAt) {
     state.rehearsal.nextAdvanceAt = Date.now() + timing.intervalMs;
   }
 
-  if (Date.now() >= state.rehearsal.nextAdvanceAt) {
+  if (autoMode && hasNextCard && Date.now() >= state.rehearsal.nextAdvanceAt) {
     state.rehearsal.index = Math.min(state.rehearsal.index + 1, bullets.length - 1);
     renderRehearsalScreen({ resetAutoTimer: true });
     return;
   }
 
-  updateRehearsalTimerStatus(timing);
+  updateRehearsalCardTimers(timing);
 }
 
 function setRehearsalMode(mode, options = {}) {
@@ -730,7 +739,7 @@ function setRehearsalMode(mode, options = {}) {
   state.rehearsal.mode = nextMode;
 
   if (elements.fullscreenRehearsal.hidden) {
-    clearRehearsalAutoTimer();
+    clearRehearsalTickTimer();
     renderApp();
     return;
   }
@@ -4568,12 +4577,14 @@ function openRehearsal() {
   state.rehearsal.speechId = speech.id;
   state.rehearsal.versionId = version.id;
   state.rehearsal.index = 0;
+  state.rehearsal.startedAt = Date.now();
   elements.fullscreenRehearsal.hidden = false;
   renderRehearsalScreen({ resetAutoTimer: true });
 }
 
 function closeRehearsal() {
-  clearRehearsalAutoTimer();
+  clearRehearsalTickTimer();
+  state.rehearsal.startedAt = 0;
   elements.fullscreenRehearsal.hidden = true;
 }
 
@@ -4599,12 +4610,7 @@ function renderRehearsalScreen(options = {}) {
   const timing = getRehearsalTiming(version, bullets);
   const progress = ((index + 1) / bullets.length) * 100;
   const nearEnd = bullets.length > 1 && index >= Math.max(1, bullets.length - Math.ceil(bullets.length * 0.25));
-  const fullscreenTitle = speech.goal
-    ? `Bullet rehearsal · ${speech.goal}`
-    : "Bullet rehearsal";
 
-  elements.fullscreenType.textContent = `${speech.title} · ${version.label}`;
-  elements.fullscreenTitle.textContent = fullscreenTitle;
   elements.fullscreenModeToggle.innerHTML = renderRehearsalModeToggle(timing, {
     ariaLabel: "Fullscreen rehearsal pacing mode",
     extraClassName: "fullscreen-mode-toggle",
@@ -4612,11 +4618,10 @@ function renderRehearsalScreen(options = {}) {
   elements.fullscreenBullet.textContent = bullets[index];
   elements.fullscreenProgress.style.width = `${progress}%`;
   elements.fullscreenProgress.dataset.nearEnd = String(nearEnd);
-  elements.fullscreenCounter.textContent = `${index + 1} / ${bullets.length}`;
   elements.prevBulletButton.disabled = index === 0;
   elements.nextBulletButton.disabled = index === bullets.length - 1;
-  syncRehearsalAutoTimer({ timing, reset: resetAutoTimer });
-  updateRehearsalTimerStatus(timing);
+  syncRehearsalTickTimer({ timing, reset: resetAutoTimer });
+  updateRehearsalCardTimers(timing);
 }
 
 async function selectSpeech(speechId, options = {}) {

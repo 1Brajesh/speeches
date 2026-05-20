@@ -2109,17 +2109,13 @@
       padding: 20px 24px;
     }
 
-    .fullscreen-meta {
-      display: grid;
-      gap: 8px;
-    }
-
     .fullscreen-controls {
       display: flex;
       flex-wrap: wrap;
       gap: 12px;
       align-items: center;
       justify-content: flex-end;
+      width: 100%;
     }
 
     .fullscreen-mode-toggle {
@@ -2149,11 +2145,6 @@
       cursor: not-allowed;
     }
 
-    .fullscreen-timer-status {
-      margin: 0;
-      max-width: 52ch;
-    }
-
     .fullscreen-body {
       display: grid;
       place-items: center;
@@ -2170,8 +2161,34 @@
         linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)),
         rgba(255, 255, 255, 0.02);
       box-shadow: 0 30px 90px rgba(0, 0, 0, 0.34);
+      position: relative;
       display: grid;
       place-items: center;
+      text-align: center;
+    }
+
+    .fullscreen-stage-head {
+      position: absolute;
+      top: clamp(18px, 3vw, 28px);
+      left: clamp(18px, 3vw, 28px);
+      right: clamp(18px, 3vw, 28px);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      pointer-events: none;
+    }
+
+    .fullscreen-stage-chip {
+      min-width: 72px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(8, 12, 18, 0.38);
+      backdrop-filter: blur(10px);
+      color: #f7f5f1;
+      font-size: 0.94rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
       text-align: center;
     }
 
@@ -2470,11 +2487,6 @@
 
   <section class="fullscreen" id="fullscreenRehearsal" hidden>
     <div class="fullscreen-bar">
-      <div class="fullscreen-meta">
-        <div class="eyebrow" id="fullscreenType">Rehearsal</div>
-        <p class="fullscreen-hint" id="fullscreenTitle">Speech title</p>
-        <p class="fullscreen-hint fullscreen-timer-status" id="fullscreenTimerStatus">Manual pacing.</p>
-      </div>
       <div class="fullscreen-controls">
         <div id="fullscreenModeToggle"></div>
         <div class="button-row">
@@ -2487,6 +2499,10 @@
 
     <div class="fullscreen-body" id="fullscreenBody">
       <div class="fullscreen-stage">
+        <div class="fullscreen-stage-head" aria-hidden="true">
+          <span class="fullscreen-stage-chip" id="fullscreenCardTimer">Manual</span>
+          <span class="fullscreen-stage-chip" id="fullscreenElapsedTimer">0:00</span>
+        </div>
         <div class="fullscreen-bullet" id="fullscreenBullet">Bullet</div>
       </div>
     </div>
@@ -2496,13 +2512,12 @@
         <div class="progress-track">
           <div class="progress-fill" id="fullscreenProgress"></div>
         </div>
-        <p class="fullscreen-hint" id="fullscreenCounter">1 / 1</p>
       </div>
       <p class="fullscreen-hint">Left tap back · right tap forward · Space / arrows</p>
     </div>
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260520a"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260520b"></script>
 </body>
 </html>
