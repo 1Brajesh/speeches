@@ -20,6 +20,8 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
   - shared Supabase magic-link auth helper
 - `supabase/20260506143000_add_brajesh_speeches.sql`
   - speeches schema, triggers, indexes, and RLS
+- `supabase/20260519230711_add_brajesh_speech_search.sql`
+  - speech search index and RPC for global speech search
 
 ## Stack
 
@@ -136,7 +138,7 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
 
 - Important: when speeches UI changes appear not to register after deploy, check for stale cached JS.
 - The speeches page currently cache-busts the module URL in `index.html`:
-  - `./assets/js/brajesh-speeches.js?v=20260517c`
+  - `./assets/js/brajesh-speeches.js?v=20260519f`
 - If future speeches JS changes appear missing in production, bump that query-string version.
 
 ## Useful Starting Point

@@ -29,6 +29,10 @@ const state = {
   workspaceView: "speeches",
   ideaSearch: "",
   search: "",
+  speechSearchResultQuery: "",
+  speechSearchIds: null,
+  speechSearchLoading: false,
+  speechSearchError: "",
   playbookSearch: "",
   ideaFilter: "all",
   filter: "all",
@@ -76,6 +80,8 @@ let speechDeleteBusy = false;
 let versionDeleteBusy = false;
 let playbookDeleteBusy = false;
 const speechDetailPromises = new Map();
+let speechSearchTimer = null;
+let speechSearchRequestToken = 0;
 
 const elements = {
   pageStatus: document.querySelector("#pageStatus"),
@@ -230,7 +236,15 @@ function resetSpeechState() {
   state.speeches = [];
   state.playbookEntries = [];
   speechDetailPromises.clear();
+  window.clearTimeout(speechSearchTimer);
+  speechSearchTimer = null;
+  speechSearchRequestToken += 1;
   state.workspaceView = "speeches";
+  state.search = "";
+  state.speechSearchResultQuery = "";
+  state.speechSearchIds = null;
+  state.speechSearchLoading = false;
+  state.speechSearchError = "";
   state.selectedIdeaId = null;
   state.selectedSpeechId = null;
   state.selectedVersionId = null;
@@ -608,6 +622,16 @@ function ensureTextArray(value) {
     : [];
 }
 
+function clearSpeechSearchState() {
+  window.clearTimeout(speechSearchTimer);
+  speechSearchTimer = null;
+  speechSearchRequestToken += 1;
+  state.speechSearchResultQuery = "";
+  state.speechSearchIds = null;
+  state.speechSearchLoading = false;
+  state.speechSearchError = "";
+}
+
 function createSpeechSearchText({ title = "", coreIdea = "", goal = "", tags = [], notes = "" }) {
   return [
     title,
@@ -806,6 +830,81 @@ async function loadSpeechDetail(speechId, options = {}) {
   return promise;
 }
 
+async function loadSpeechSearchResults(query, options = {}) {
+  const { renderPending = false, renderAfter = true } = options;
+  const normalizedQuery = String(query || "").trim();
+
+  if (!normalizedQuery) {
+    clearSpeechSearchState();
+    if (renderAfter) {
+      renderApp();
+    }
+    return new Set();
+  }
+
+  const requestToken = ++speechSearchRequestToken;
+  state.speechSearchLoading = true;
+  state.speechSearchError = "";
+
+  if (renderPending) {
+    renderApp();
+  }
+
+  try {
+    const { data, error } = await db.rpc("search_brajesh_speeches", {
+      search_query: normalizedQuery,
+    });
+
+    if (error) throw error;
+
+    if (requestToken !== speechSearchRequestToken) {
+      return state.speechSearchIds;
+    }
+
+    state.speechSearchResultQuery = normalizedQuery.toLowerCase();
+    state.speechSearchIds = new Set((data || []).map((row) => row.speech_id).filter(Boolean));
+    state.speechSearchError = "";
+    return state.speechSearchIds;
+  } catch (error) {
+    if (requestToken !== speechSearchRequestToken) {
+      return state.speechSearchIds;
+    }
+
+    state.speechSearchResultQuery = "";
+    state.speechSearchIds = null;
+    state.speechSearchError = error.message || "Could not search all speeches.";
+    return null;
+  } finally {
+    if (requestToken === speechSearchRequestToken) {
+      state.speechSearchLoading = false;
+      if (renderAfter) {
+        renderApp();
+      }
+    }
+  }
+}
+
+function queueSpeechSearch(query = state.search) {
+  window.clearTimeout(speechSearchTimer);
+  speechSearchTimer = null;
+
+  const normalizedQuery = String(query || "").trim();
+  if (!normalizedQuery) {
+    clearSpeechSearchState();
+    renderApp();
+    return;
+  }
+
+  state.speechSearchLoading = true;
+  state.speechSearchError = "";
+  renderApp();
+
+  speechSearchTimer = window.setTimeout(() => {
+    speechSearchTimer = null;
+    void loadSpeechSearchResults(normalizedQuery, { renderPending: false, renderAfter: true });
+  }, 180);
+}
+
 function mapIdeaData(ideaRows) {
   return (ideaRows || [])
     .map((row) => ({
@@ -889,6 +988,16 @@ async function loadSpeeches(options = {}) {
   state.playbookEntries = mapPlaybookData(playbookResult.data);
 
   if (state.workspaceView === "speeches") {
+    if (state.search.trim()) {
+      try {
+        await loadSpeechSearchResults(state.search, { renderAfter: false });
+      } catch {
+        // Search can fall back to summary text if the RPC is unavailable.
+      }
+    } else {
+      clearSpeechSearchState();
+    }
+
     const selectedSpeech = ensureSelection();
     if (selectedSpeech) {
       try {
@@ -1250,6 +1359,10 @@ function getFilteredSpeeches() {
 
     if (!query) {
       return true;
+    }
+
+    if (state.speechSearchResultQuery === query && state.speechSearchIds instanceof Set) {
+      return state.speechSearchIds.has(speech.id);
     }
 
     return (speech.searchText || "").includes(query);
@@ -1980,10 +2093,18 @@ function renderPlaybookList() {
 function renderSpeechList() {
   const filtered = getFilteredSpeeches();
   const selected = ensureSelection();
+  const searchQuery = state.search.trim();
 
   if (!filtered.length) {
+    if (searchQuery && state.speechSearchLoading) {
+      elements.speechList.innerHTML = '<div class="empty-state">Searching all speeches...</div>';
+      setLibraryStatus(`Searching all speeches for "${searchQuery}"...`, "ok");
+      renderSpeechDetail(null);
+      return;
+    }
+
     elements.speechList.innerHTML = '<div class="empty-state">No speeches match this filter.</div>';
-    setLibraryStatus("No matching speeches.", "");
+    setLibraryStatus(searchQuery ? `No speeches match "${searchQuery}".` : "No matching speeches.", "");
     renderSpeechDetail(null);
     return;
   }
@@ -2005,7 +2126,17 @@ function renderSpeechList() {
     `;
   }).join("");
 
-  setLibraryStatus(state.search ? `Filtering speeches by "${state.search.trim()}".` : "Showing the current speech library.", "ok");
+  if (searchQuery) {
+    if (state.speechSearchLoading) {
+      setLibraryStatus(`Searching all speeches for "${searchQuery}"...`, "ok");
+    } else if (state.speechSearchError) {
+      setLibraryStatus(`Showing summary matches for "${searchQuery}". Full-text search is temporarily unavailable.`, "warn");
+    } else {
+      setLibraryStatus(`Searching all speeches for "${searchQuery}".`, "ok");
+    }
+  } else {
+    setLibraryStatus("Showing the current speech library.", "ok");
+  }
   renderSpeechDetail(selected);
 }
 
@@ -4552,12 +4683,14 @@ elements.workspaceToggleButton.addEventListener("click", () => {
 elements.searchInput.addEventListener("input", () => {
   if (state.workspaceView === "ideas") {
     state.ideaSearch = elements.searchInput.value;
+    renderApp();
   } else if (state.workspaceView === "playbook") {
     state.playbookSearch = elements.searchInput.value;
+    renderApp();
   } else {
     state.search = elements.searchInput.value;
+    queueSpeechSearch(state.search);
   }
-  renderApp();
 });
 
 elements.filterBar.addEventListener("click", (event) => {
