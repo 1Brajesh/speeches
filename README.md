@@ -22,6 +22,8 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
   - speeches schema, triggers, indexes, and RLS
 - `supabase/20260519230711_add_brajesh_speech_search.sql`
   - speech search index and RPC for global speech search
+- `supabase/20260520231500_add_brajesh_speech_user_settings.sql`
+  - per-admin reading settings for script text size and spacing
 
 ## Stack
 
@@ -64,12 +66,16 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
 - `brajesh_speech_playbook`
   - reusable cross-speech speaking principles
   - title, category, principle, why it works, tags, pinned state
+- `brajesh_speech_user_settings`
+  - per-admin reading preferences
+  - script text size, line spacing, paragraph spacing
 
 ## Main UI Areas
 
 - top-level ideas workspace for lightweight seed capture
 - speech library with search and status filters
 - top-level playbook workspace for reusable principles
+- top-level settings workspace for reading preferences
 - overview tab
 - versions tab
 - runs tab
@@ -84,6 +90,8 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
 - Saving a version updates the speech's `active_version_id`.
 - The selected version can be deleted from `Versions`, but each speech keeps at least one version.
 - Pinned playbook principles appear inside script-writing editors.
+- Reading controls now live in a dedicated `Settings` workspace instead of inside the script and reading surfaces.
+- Reading settings are saved per admin account in Supabase and default to `25px` text, `1.40x` line spacing, and `1.20x` paragraph spacing.
 - Logging a run usually moves the speech to `delivered`, except when:
   - the speech is still `idea`
   - the run result is `scheduled`
@@ -96,8 +104,9 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
 
 ## Current UI State
 
-- As of 2026-05-15:
+- As of 2026-05-20:
   - `Ideas`, `Speeches`, and `Playbook` are separate top-level workspace views.
+  - `Settings` is a separate top-level workspace for reading preferences.
   - the main speech workspace now uses a document-first layout with a slim dark library rail and one warm continuous detail canvas instead of stacked summary/body panels.
   - `Ideas` stores lightweight idea seeds instead of creating speech/version records up front.
   - idea seeds can be edited, deleted, searched, filtered by open vs expanded, and expanded into speeches later.
@@ -113,9 +122,9 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
   - `Edit Script` uses a collapsible `Rehearsal Bullets` panel.
   - `Edit Bullets` from the rehearsal view opens `Edit Script` directly to the expanded `Rehearsal Bullets` panel and returns to the rehearsal bullets section after save.
   - `Edit Script` footer includes a `Copy Speech` action that copies the current draft text, including unsaved edits.
-  - script text size is user-controlled with a `16-28` slider and stored in local browser storage.
-  - script line spacing is also user-controlled with a persistent slider.
-  - paragraph spacing in reading views is user-controlled with a persistent slider.
+  - script text size, line spacing, and paragraph spacing now live in the dedicated `Settings` workspace instead of taking room inside speech reading and editing surfaces.
+  - reading settings are saved per admin account in Supabase-backed user settings, not local browser storage.
+  - the default reading settings are `25px` text, `1.40x` line spacing, and `1.20x` paragraph spacing.
   - the same script text-size setting affects:
     - overview speech body
     - versions speech body
@@ -140,7 +149,7 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
 
 - Important: when speeches UI changes appear not to register after deploy, check for stale cached JS.
 - The speeches page currently cache-busts the module URL in `index.html`:
-  - `./assets/js/brajesh-speeches.js?v=20260520d`
+  - `./assets/js/brajesh-speeches.js?v=20260520e`
 - If future speeches JS changes appear missing in production, bump that query-string version.
 
 ## Useful Starting Point

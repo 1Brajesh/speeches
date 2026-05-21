@@ -6,20 +6,18 @@ import {
 } from "./brajesh-auth.js";
 
 const db = createBrajeshClient();
-const SCRIPT_TEXT_SIZE_STORAGE_KEY = "brajesh_speeches_script_text_size";
-const SCRIPT_LINE_HEIGHT_STORAGE_KEY = "brajesh_speeches_script_line_height";
-const SCRIPT_PARAGRAPH_SPACING_STORAGE_KEY = "brajesh_speeches_script_paragraph_spacing";
+const USER_SETTINGS_TABLE = "brajesh_speech_user_settings";
 const SCRIPT_TEXT_SIZE_MIN = 16;
 const SCRIPT_TEXT_SIZE_MAX = 28;
-const SCRIPT_TEXT_SIZE_DEFAULT = 20;
+const SCRIPT_TEXT_SIZE_DEFAULT = 25;
 const SCRIPT_LINE_HEIGHT_MIN = 1.2;
 const SCRIPT_LINE_HEIGHT_MAX = 2.2;
 const SCRIPT_LINE_HEIGHT_STEP = 0.02;
-const SCRIPT_LINE_HEIGHT_DEFAULT = 1.76;
+const SCRIPT_LINE_HEIGHT_DEFAULT = 1.4;
 const SCRIPT_PARAGRAPH_SPACING_MIN = 0.6;
 const SCRIPT_PARAGRAPH_SPACING_MAX = 2.6;
 const SCRIPT_PARAGRAPH_SPACING_STEP = 0.05;
-const SCRIPT_PARAGRAPH_SPACING_DEFAULT = 1.76;
+const SCRIPT_PARAGRAPH_SPACING_DEFAULT = 1.2;
 const REHEARSAL_TIMER_TICK_MS = 250;
 const REHEARSAL_INTRO_DURATION_MS = 1600;
 
@@ -56,10 +54,13 @@ const state = {
     cardStartedAt: 0,
     introEndsAt: 0,
   },
-  preferences: {
-    scriptTextSize: loadScriptTextSizePreference(),
-    scriptLineHeight: loadScriptLineHeightPreference(),
-    scriptParagraphSpacing: loadScriptParagraphSpacingPreference(),
+  preferences: createDefaultPreferences(),
+  settings: {
+    loaded: false,
+    saving: false,
+    error: "",
+    message: "Reading settings use account defaults.",
+    tone: "",
   },
   panels: {
     "rehearsal-bullets": false,
@@ -90,6 +91,9 @@ const speechDetailPromises = new Map();
 let speechSearchTimer = null;
 let speechSearchRequestToken = 0;
 let rehearsalTickTimer = null;
+let settingsSaveTimer = null;
+let settingsSaveBusy = false;
+let settingsSaveQueued = false;
 
 const elements = {
   pageStatus: document.querySelector("#pageStatus"),
@@ -100,6 +104,7 @@ const elements = {
   logoutButton: document.querySelector("#logoutButton"),
   adminIdentity: document.querySelector("#adminIdentity"),
   workspaceToggleButton: document.querySelector("#workspaceToggleButton"),
+  settingsButton: document.querySelector("#settingsButton"),
   appShell: document.querySelector("#appShell"),
   libraryEyebrow: document.querySelector("#libraryEyebrow"),
   libraryTitle: document.querySelector("#libraryTitle"),
@@ -213,6 +218,7 @@ function showLogin() {
   elements.loginPanel.hidden = false;
   elements.appShell.hidden = true;
   elements.workspaceToggleButton.hidden = true;
+  elements.settingsButton.hidden = true;
   elements.newIdeaButton.hidden = true;
   elements.newSpeechButton.hidden = true;
   elements.newPlaybookButton.hidden = true;
@@ -225,6 +231,7 @@ function showApp() {
   elements.loginPanel.hidden = true;
   elements.appShell.hidden = false;
   elements.workspaceToggleButton.hidden = false;
+  elements.settingsButton.hidden = false;
   elements.logoutButton.hidden = false;
 }
 
@@ -246,6 +253,10 @@ function resetSpeechState() {
   speechDetailPromises.clear();
   window.clearTimeout(speechSearchTimer);
   speechSearchTimer = null;
+  window.clearTimeout(settingsSaveTimer);
+  settingsSaveTimer = null;
+  settingsSaveBusy = false;
+  settingsSaveQueued = false;
   speechSearchRequestToken += 1;
   state.workspaceView = "speeches";
   state.search = "";
@@ -266,6 +277,15 @@ function resetSpeechState() {
   state.rehearsal.startedAt = 0;
   state.rehearsal.cardStartedAt = 0;
   state.rehearsal.introEndsAt = 0;
+  state.preferences = createDefaultPreferences();
+  state.settings.loaded = false;
+  state.settings.saving = false;
+  state.settings.error = "";
+  state.settings.message = "Reading settings use account defaults.";
+  state.settings.tone = "";
+  applyScriptTextSizePreference();
+  applyScriptLineHeightPreference();
+  applyScriptParagraphSpacingPreference();
   closeEditor();
   closeRehearsal();
 }
@@ -341,6 +361,14 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function createDefaultPreferences() {
+  return {
+    scriptTextSize: SCRIPT_TEXT_SIZE_DEFAULT,
+    scriptLineHeight: SCRIPT_LINE_HEIGHT_DEFAULT,
+    scriptParagraphSpacing: SCRIPT_PARAGRAPH_SPACING_DEFAULT,
+  };
+}
+
 function clampScriptTextSize(value) {
   const parsed = Number.parseInt(String(value || ""), 10);
 
@@ -349,14 +377,6 @@ function clampScriptTextSize(value) {
   }
 
   return Math.min(SCRIPT_TEXT_SIZE_MAX, Math.max(SCRIPT_TEXT_SIZE_MIN, parsed));
-}
-
-function loadScriptTextSizePreference() {
-  try {
-    return clampScriptTextSize(window.localStorage?.getItem(SCRIPT_TEXT_SIZE_STORAGE_KEY));
-  } catch {
-    return SCRIPT_TEXT_SIZE_DEFAULT;
-  }
 }
 
 function clampScriptLineHeight(value) {
@@ -370,14 +390,6 @@ function clampScriptLineHeight(value) {
   return Math.round(clamped * 100) / 100;
 }
 
-function loadScriptLineHeightPreference() {
-  try {
-    return clampScriptLineHeight(window.localStorage?.getItem(SCRIPT_LINE_HEIGHT_STORAGE_KEY));
-  } catch {
-    return SCRIPT_LINE_HEIGHT_DEFAULT;
-  }
-}
-
 function clampScriptParagraphSpacing(value) {
   const parsed = Number.parseFloat(String(value || ""));
 
@@ -387,32 +399,6 @@ function clampScriptParagraphSpacing(value) {
 
   const clamped = Math.min(SCRIPT_PARAGRAPH_SPACING_MAX, Math.max(SCRIPT_PARAGRAPH_SPACING_MIN, parsed));
   return Math.round(clamped * 100) / 100;
-}
-
-function loadScriptParagraphSpacingPreference() {
-  try {
-    return clampScriptParagraphSpacing(window.localStorage?.getItem(SCRIPT_PARAGRAPH_SPACING_STORAGE_KEY));
-  } catch {
-    return SCRIPT_PARAGRAPH_SPACING_DEFAULT;
-  }
-}
-
-function persistScriptTextSizePreference(value) {
-  try {
-    window.localStorage?.setItem(SCRIPT_TEXT_SIZE_STORAGE_KEY, String(value));
-  } catch {}
-}
-
-function persistScriptLineHeightPreference(value) {
-  try {
-    window.localStorage?.setItem(SCRIPT_LINE_HEIGHT_STORAGE_KEY, String(value));
-  } catch {}
-}
-
-function persistScriptParagraphSpacingPreference(value) {
-  try {
-    window.localStorage?.setItem(SCRIPT_PARAGRAPH_SPACING_STORAGE_KEY, String(value));
-  } catch {}
 }
 
 function applyScriptTextSizePreference() {
@@ -425,6 +411,12 @@ function applyScriptLineHeightPreference() {
 
 function applyScriptParagraphSpacingPreference() {
   document.documentElement.style.setProperty("--script-paragraph-gap", `${state.preferences.scriptParagraphSpacing}em`);
+}
+
+function applyAllScriptPreferences() {
+  applyScriptTextSizePreference();
+  applyScriptLineHeightPreference();
+  applyScriptParagraphSpacingPreference();
 }
 
 function syncScriptTextSizeControls(root = document) {
@@ -480,15 +472,168 @@ function syncScriptParagraphSpacingControls(root = document) {
   });
 }
 
+function syncAllScriptPreferenceControls(root = document) {
+  syncScriptTextSizeControls(root);
+  syncScriptLineHeightControls(root);
+  syncScriptParagraphSpacingControls(root);
+}
+
+function syncSettingsStatus(root = document) {
+  root.querySelectorAll("[data-settings-status]").forEach((element) => {
+    element.textContent = state.settings.message;
+    element.dataset.tone = state.settings.tone;
+  });
+}
+
+function setSettingsState(patch = {}) {
+  Object.assign(state.settings, patch);
+  syncSettingsStatus();
+}
+
+function settingsPayload() {
+  return {
+    user_id: state.user?.id || "",
+    script_text_size: state.preferences.scriptTextSize,
+    script_line_height: state.preferences.scriptLineHeight,
+    script_paragraph_spacing: state.preferences.scriptParagraphSpacing,
+  };
+}
+
+async function loadUserSettings() {
+  if (!state.user?.id) {
+    state.preferences = createDefaultPreferences();
+    applyAllScriptPreferences();
+    setSettingsState({
+      loaded: false,
+      saving: false,
+      error: "",
+      message: "Reading settings use account defaults.",
+      tone: "",
+    });
+    return;
+  }
+
+  const { data, error } = await db
+    .from(USER_SETTINGS_TABLE)
+    .select("script_text_size, script_line_height, script_paragraph_spacing")
+    .eq("user_id", state.user.id)
+    .maybeSingle();
+
+  if (error) {
+    state.preferences = createDefaultPreferences();
+    applyAllScriptPreferences();
+    setSettingsState({
+      loaded: true,
+      saving: false,
+      error: error.message || "Could not load reading settings.",
+      message: error.message || "Could not load reading settings. Using defaults for now.",
+      tone: "error",
+    });
+    return;
+  }
+
+  state.preferences = {
+    scriptTextSize: clampScriptTextSize(data?.script_text_size),
+    scriptLineHeight: clampScriptLineHeight(data?.script_line_height),
+    scriptParagraphSpacing: clampScriptParagraphSpacing(data?.script_paragraph_spacing),
+  };
+  applyAllScriptPreferences();
+  setSettingsState({
+    loaded: true,
+    saving: false,
+    error: "",
+    message: data
+      ? "Reading settings loaded from your account."
+      : "Using account defaults. Changes here save to your account automatically.",
+    tone: "",
+  });
+}
+
+function queueUserSettingsSave() {
+  if (!state.user?.id) {
+    setSettingsState({
+      loaded: false,
+      saving: false,
+      error: "",
+      message: "Sign in to save reading settings to your account.",
+      tone: "warn",
+    });
+    return;
+  }
+
+  window.clearTimeout(settingsSaveTimer);
+  setSettingsState({
+    loaded: true,
+    saving: true,
+    error: "",
+    message: "Saving reading settings to your account...",
+    tone: "ok",
+  });
+
+  settingsSaveTimer = window.setTimeout(() => {
+    settingsSaveTimer = null;
+    void persistUserSettings();
+  }, 320);
+}
+
+async function persistUserSettings() {
+  if (!state.user?.id) {
+    return;
+  }
+
+  if (settingsSaveBusy) {
+    settingsSaveQueued = true;
+    return;
+  }
+
+  settingsSaveBusy = true;
+
+  try {
+    const { error } = await db
+      .from(USER_SETTINGS_TABLE)
+      .upsert(settingsPayload(), { onConflict: "user_id" });
+
+    if (error) {
+      throw error;
+    }
+
+    setSettingsState({
+      loaded: true,
+      saving: false,
+      error: "",
+      message: "Reading settings saved to your account.",
+      tone: "ok",
+    });
+  } catch (error) {
+    setSettingsState({
+      loaded: true,
+      saving: false,
+      error: error.message || "Could not save reading settings.",
+      message: error.message || "Could not save reading settings.",
+      tone: "error",
+    });
+  } finally {
+    settingsSaveBusy = false;
+
+    if (settingsSaveQueued) {
+      settingsSaveQueued = false;
+      void persistUserSettings();
+    }
+  }
+}
+
 function setScriptTextSize(value) {
   const nextValue = clampScriptTextSize(value);
   const preserveScrollContainer = elements.editorShell.dataset.layout === "studio"
     ? elements.editorFields
     : null;
   state.preferences.scriptTextSize = nextValue;
-  persistScriptTextSizePreference(nextValue);
   applyScriptTextSizePreference();
   syncScriptTextSizeControls();
+  if (state.workspaceView === "settings") {
+    renderCounts();
+  }
+  queueUserSettingsSave();
   scheduleAutoSizeRichTextareas(elements.editorShell, { preserveScrollContainer });
 }
 
@@ -498,18 +643,24 @@ function setScriptLineHeight(value) {
     ? elements.editorFields
     : null;
   state.preferences.scriptLineHeight = nextValue;
-  persistScriptLineHeightPreference(nextValue);
   applyScriptLineHeightPreference();
   syncScriptLineHeightControls();
+  if (state.workspaceView === "settings") {
+    renderCounts();
+  }
+  queueUserSettingsSave();
   scheduleAutoSizeRichTextareas(elements.editorShell, { preserveScrollContainer });
 }
 
 function setScriptParagraphSpacing(value) {
   const nextValue = clampScriptParagraphSpacing(value);
   state.preferences.scriptParagraphSpacing = nextValue;
-  persistScriptParagraphSpacingPreference(nextValue);
   applyScriptParagraphSpacingPreference();
   syncScriptParagraphSpacingControls();
+  if (state.workspaceView === "settings") {
+    renderCounts();
+  }
+  queueUserSettingsSave();
 }
 
 function isPanelOpen(key) {
@@ -1296,6 +1447,7 @@ async function loadPage(options = {}) {
       return;
     }
 
+    await loadUserSettings();
     await loadSpeeches(options);
   } catch (error) {
     resetSpeechState();
@@ -1855,11 +2007,15 @@ function renderTopActions() {
   const showIdeas = state.workspaceView === "ideas";
   const showSpeeches = state.workspaceView === "speeches";
   const showPlaybook = state.workspaceView === "playbook";
+  const showSettings = state.workspaceView === "settings";
 
   elements.workspaceToggleButton.hidden = !state.user;
+  elements.settingsButton.hidden = !state.user;
   elements.newIdeaButton.hidden = !state.user;
   elements.newSpeechButton.hidden = !state.user;
   elements.newPlaybookButton.hidden = !state.user;
+  elements.settingsButton.textContent = "Settings";
+  elements.settingsButton.className = showSettings ? "primary-button" : "ghost-button";
 
   if (showSpeeches) {
     elements.workspaceToggleButton.textContent = "Playbook";
@@ -1885,6 +2041,18 @@ function renderTopActions() {
     return;
   }
 
+  if (showSettings) {
+    elements.workspaceToggleButton.textContent = "Speech Library";
+    elements.workspaceToggleButton.className = "ghost-button";
+    elements.newIdeaButton.textContent = "Ideas";
+    elements.newIdeaButton.className = "ghost-button";
+    elements.newSpeechButton.hidden = false;
+    elements.newSpeechButton.textContent = "Playbook";
+    elements.newSpeechButton.className = "ghost-button";
+    elements.newPlaybookButton.hidden = true;
+    return;
+  }
+
   elements.workspaceToggleButton.textContent = "Speech Library";
   elements.workspaceToggleButton.className = "ghost-button";
   elements.newIdeaButton.textContent = "Ideas";
@@ -1896,6 +2064,18 @@ function renderTopActions() {
 }
 
 function renderWorkspaceRail() {
+  if (state.workspaceView === "settings") {
+    elements.libraryEyebrow.textContent = "Settings";
+    elements.libraryTitle.textContent = "Reading";
+    elements.searchInput.hidden = true;
+    elements.filterBar.hidden = true;
+    elements.searchInput.value = "";
+    return;
+  }
+
+  elements.searchInput.hidden = false;
+  elements.filterBar.hidden = false;
+
   if (state.workspaceView === "ideas") {
     elements.libraryEyebrow.textContent = "Ideas";
     elements.libraryTitle.textContent = "Idea Seeds";
@@ -1933,6 +2113,13 @@ function playbookCategoryCount() {
 }
 
 function renderCounts() {
+  if (state.workspaceView === "settings") {
+    elements.totalCount.textContent = `${state.preferences.scriptTextSize}px text`;
+    elements.draftCount.textContent = `${formatScriptLineHeightValue(state.preferences.scriptLineHeight)} line`;
+    elements.deliveredCount.textContent = `${formatScriptParagraphSpacingValue(state.preferences.scriptParagraphSpacing)} paragraph`;
+    return;
+  }
+
   if (state.workspaceView === "ideas") {
     const total = state.ideas.length;
     const open = state.ideas.filter((idea) => !idea.expandedSpeechId).length;
@@ -1965,6 +2152,11 @@ function renderCounts() {
 }
 
 function renderFilters() {
+  if (state.workspaceView === "settings") {
+    elements.filterBar.innerHTML = "";
+    return;
+  }
+
   if (state.workspaceView === "ideas") {
     const filters = [
       { id: "all", label: "All" },
@@ -2351,6 +2543,100 @@ function renderPlaybookList() {
   renderPlaybookDetail(selected);
 }
 
+function renderSettingsBody() {
+  return `
+    <div class="reader-stack">
+      <div class="card">
+        <div class="panel-head">
+          <div>
+            <h4>Reading Layout</h4>
+            <p class="helper-copy">These controls affect speech reading views, compare mode, and the script editor across the whole app.</p>
+          </div>
+          <span class="meta-chip">Account-backed</span>
+        </div>
+        <p class="status" data-settings-status>${escapeHtml(state.settings.message)}</p>
+        <div class="panel-tools">
+          ${renderScriptReadingControls()}
+        </div>
+      </div>
+
+      <div class="two-up">
+        <div class="card">
+          <div class="panel-head">
+            <h4>Current Defaults</h4>
+            <span class="meta-chip">Applied live</span>
+          </div>
+          <div class="info-grid">
+            <div class="info-row">
+              <strong>Script Text</strong>
+              <span>${state.preferences.scriptTextSize}px</span>
+            </div>
+            <div class="info-row">
+              <strong>Line Spacing</strong>
+              <span>${formatScriptLineHeightValue(state.preferences.scriptLineHeight)}</span>
+            </div>
+            <div class="info-row">
+              <strong>Paragraph Spacing</strong>
+              <span>${formatScriptParagraphSpacingValue(state.preferences.scriptParagraphSpacing)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="panel-head">
+            <h4>Preview</h4>
+            <span class="meta-chip">Live sample</span>
+          </div>
+          <div class="script-box">
+            ${renderScriptBodyText("This is how your script body will read across overview, versions, and script editing.\n\nAdjust the spacing until the page feels calm enough to rehearse from without wasting vertical space.")}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderSettingsDetail() {
+  elements.tabBar.hidden = true;
+  syncDocumentScrollMode(null);
+  elements.speechMode.textContent = "Settings";
+  elements.speechTitle.textContent = "Reading Settings";
+  elements.speechStatusChip.textContent = "Settings";
+  elements.speechStatusChip.dataset.status = "settings";
+  elements.speechGoalChip.textContent = "Per admin account";
+  elements.speechCountChip.textContent = "Auto-saved";
+  elements.speechIdea.textContent = "Keep reading controls out of the way here, then let the rest of the app stay focused on writing and rehearsal.";
+  elements.speechTags.innerHTML = "";
+  elements.detailActionRow.innerHTML = `
+    <button class="ghost-button" type="button" data-action="show-speeches">Speech Library</button>
+  `;
+  elements.focusCard.innerHTML = `
+    <div class="focus-block" data-size="wide">
+      <strong>Why This Moved</strong>
+      <p>Script text size and spacing now live in a dedicated settings workspace instead of taking room inside speech reading and editing surfaces.</p>
+    </div>
+    <div class="focus-block">
+      <strong>Defaults</strong>
+      <p>25px · 1.40x · 1.20x</p>
+      <span class="helper-copy">Changes save to your Supabase-backed admin settings.</span>
+    </div>
+  `;
+  elements.tabContent.innerHTML = renderSettingsBody();
+  syncAllScriptPreferenceControls(elements.tabContent);
+  syncSettingsStatus(elements.tabContent);
+  syncHeaderActions();
+}
+
+function renderSettingsList() {
+  elements.speechList.innerHTML = `
+    <div class="empty-state">
+      Reading settings are saved per admin account and applied across the full speeches workspace.
+    </div>
+  `;
+  setLibraryStatus("Showing account-level reading settings.", "ok");
+  renderSettingsDetail();
+}
+
 function renderSpeechList() {
   const filtered = getFilteredSpeeches();
   const selected = ensureSelection();
@@ -2673,9 +2959,6 @@ function renderOverviewTab(speech) {
         <span class="metric-chip">${speechWordCount(speech)} words</span>
         <span class="metric-chip">${version?.rehearsalBullets?.length || 0} rehearsal bullets</span>
       </div>
-      <div class="panel-tools">
-        ${renderScriptReadingControls()}
-      </div>
       <div class="script-box">
         ${renderScriptBodyText(version?.speechBody, "No speech body yet.")}
       </div>
@@ -2740,16 +3023,13 @@ function renderVersionsTab(speech) {
           <div class="button-row">
             <span class="meta-chip">${displayText(basedOnVersion ? `Based on ${basedOnVersion.label}` : "Original version")}</span>
             <span class="meta-chip">${displayText(editTimestampLabel)}</span>
-            <button class="ghost-button" type="button" data-action="new-version">New Version</button>
-            <button class="script-button" type="button" data-action="edit-version">Edit Script</button>
-            ${compareVersion
+          <button class="ghost-button" type="button" data-action="new-version">New Version</button>
+          <button class="script-button" type="button" data-action="edit-version">Edit Script</button>
+          ${compareVersion
               ? `<button class="ghost-button" type="button" data-action="toggle-version-compare" aria-pressed="${String(compareOpen)}">${compareOpen ? "Hide Compare" : "Compare"}</button>`
               : `<span class="meta-chip">${displayText(compareReference.label)}</span>`}
             ${canDeleteVersion ? '<button class="danger-button" type="button" data-action="delete-version">Delete Version</button>' : '<span class="meta-chip">Keep at least 1 version</span>'}
           </div>
-        </div>
-        <div class="panel-tools">
-          ${renderScriptReadingControls()}
         </div>
         <div class="script-box version-script-box" style="margin-bottom: 14px;">
           ${renderScriptBodyText(selectedVersion?.speechBody, "No speech body yet.")}
@@ -3405,7 +3685,6 @@ function renderScriptComposer({
           <h3>${escapeHtml(heading)}</h3>
           <p class="editor-card-copy">${escapeHtml(copy)}</p>
         </div>
-        ${renderScriptReadingControls({ includeParagraphSpacing: false })}
       </div>
       <div class="field">
         <label for="${escapeHtml(bodyId)}">Speech Body</label>
@@ -4784,6 +5063,12 @@ async function runAction(action) {
     return;
   }
 
+  if (action === "show-settings") {
+    state.workspaceView = "settings";
+    renderApp();
+    return;
+  }
+
   if (action === "reload-speech-detail") {
     return;
   }
@@ -4942,12 +5227,13 @@ function renderApp() {
     renderIdeaList();
   } else if (state.workspaceView === "playbook") {
     renderPlaybookList();
+  } else if (state.workspaceView === "settings") {
+    renderSettingsList();
   } else {
     renderSpeechList();
   }
-  syncScriptTextSizeControls(elements.tabContent);
-  syncScriptLineHeightControls(elements.tabContent);
-  syncScriptParagraphSpacingControls(elements.tabContent);
+  syncAllScriptPreferenceControls(elements.tabContent);
+  syncSettingsStatus(elements.tabContent);
 }
 
 elements.loginForm.addEventListener("submit", async (event) => {
@@ -4981,6 +5267,10 @@ elements.workspaceToggleButton.addEventListener("click", () => {
   }
 
   void runAction("show-speeches");
+});
+
+elements.settingsButton.addEventListener("click", () => {
+  void runAction("show-settings");
 });
 
 elements.searchInput.addEventListener("input", () => {
@@ -5027,6 +5317,11 @@ elements.newIdeaButton.addEventListener("click", () => {
 elements.newSpeechButton.addEventListener("click", () => {
   if (state.workspaceView === "ideas") {
     void runAction("new-idea");
+    return;
+  }
+
+  if (state.workspaceView === "settings") {
+    void runAction("show-playbook");
     return;
   }
 
@@ -5251,9 +5546,7 @@ db.auth.onAuthStateChange((event, session) => {
 });
 
 function init() {
-  applyScriptTextSizePreference();
-  applyScriptLineHeightPreference();
-  applyScriptParagraphSpacingPreference();
+  applyAllScriptPreferences();
   updateIdentityUI();
   renderApp();
   requestPageLoad().finally(clearAuthHash);

@@ -558,6 +558,12 @@
       background: rgba(242, 200, 118, 0.08);
     }
 
+    .status-chip[data-status="settings"] {
+      color: var(--navy);
+      border-color: rgba(123, 183, 255, 0.3);
+      background: rgba(123, 183, 255, 0.1);
+    }
+
     .status-chip[data-status="expanded"] {
       color: var(--green);
       border-color: rgba(138, 208, 166, 0.28);
@@ -1363,6 +1369,12 @@
       background: rgba(217, 162, 75, 0.14);
     }
 
+    .document-shell .status-chip[data-status="settings"] {
+      color: #3b6694;
+      border-color: rgba(119, 179, 247, 0.28);
+      background: rgba(119, 179, 247, 0.14);
+    }
+
     .document-shell .ghost-button,
     .document-shell .meta-button,
     .document-shell .script-button,
@@ -1675,6 +1687,12 @@
       color: var(--violet);
       border-color: rgba(167, 144, 255, 0.24);
       background: rgba(167, 144, 255, 0.08);
+    }
+
+    .document-shell .status-chip[data-status="settings"] {
+      color: var(--navy);
+      border-color: rgba(123, 183, 255, 0.3);
+      background: rgba(123, 183, 255, 0.1);
     }
 
     .document-shell .ghost-button,
@@ -2390,6 +2408,7 @@
       <div class="top-actions">
         <span class="identity-text" id="adminIdentity"></span>
         <button class="ghost-button" type="button" id="workspaceToggleButton" hidden>Playbook</button>
+        <button class="ghost-button" type="button" id="settingsButton" hidden>Settings</button>
         <button class="ghost-button" type="button" id="newIdeaButton" hidden>New Idea</button>
         <button class="primary-button" type="button" id="newSpeechButton" hidden>New Speech</button>
         <button class="primary-button" type="button" id="newPlaybookButton" hidden>New Principle</button>
@@ -2533,6 +2552,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260520d"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260520e"></script>
 </body>
 </html>
