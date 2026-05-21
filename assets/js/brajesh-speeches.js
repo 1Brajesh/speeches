@@ -50,7 +50,7 @@ const state = {
     speechId: null,
     versionId: null,
     index: 0,
-    mode: "manual",
+    mode: "auto",
     nextAdvanceAt: 0,
     startedAt: 0,
     cardStartedAt: 0,
@@ -1744,6 +1744,15 @@ function getSelectedVersionForSpeech(speech) {
   return speech.versions[0] || null;
 }
 
+function scrollTabAnchorIntoView(anchorName) {
+  if (!anchorName) return;
+
+  window.requestAnimationFrame(() => {
+    const anchor = elements.tabContent.querySelector(`[data-tab-anchor="${anchorName}"]`);
+    anchor?.scrollIntoView({ block: "start", inline: "nearest" });
+  });
+}
+
 function getSelectedDeliveryForSpeech(speech) {
   if (!speech?.deliveries?.length) return null;
 
@@ -2963,7 +2972,7 @@ function renderRehearsalTab(speech) {
 
   return `
     <div class="two-up rehearsal-layout">
-      <div class="card rehearsal-card">
+      <div class="card rehearsal-card" data-tab-anchor="rehearsal-bullets">
         <div class="panel-head">
           <h4>${leftTitle}</h4>
           <span class="meta-chip">${bullets.length} bullets</span>
@@ -2980,9 +2989,6 @@ function renderRehearsalTab(speech) {
         ` : `
           <div class="empty-state rehearsal-empty-state">No rehearsal bullets added yet.</div>
         `}
-        <div class="rehearsal-card-footer">
-          <button class="script-button" type="button" data-action="edit-version-bullets">${editLabel}</button>
-        </div>
       </div>
 
       <div class="card rehearsal-card rehearsal-launch-card">
@@ -3000,6 +3006,7 @@ function renderRehearsalTab(speech) {
           </div>
         </div>
         <div class="rehearsal-launch-actions">
+          <button class="script-button" type="button" data-action="edit-version-bullets">${editLabel}</button>
           <button class="primary-button rehearsal-launch-button" type="button" data-action="start-rehearsal">${buttonLabel}</button>
           <p class="helper-copy rehearsal-launch-copy">${launchCopy}</p>
         </div>
@@ -4146,6 +4153,7 @@ async function saveVersion(formData) {
   const isEdit = state.editor.intent === "edit";
   const speech = getSpeechById(state.editor.speechId);
   if (!speech) return;
+  const returnToBullets = state.editor.entryPoint === "rehearsal-bullets";
 
   const label = cleanText(formData.get("label"));
   if (!label) {
@@ -4205,9 +4213,12 @@ async function saveVersion(formData) {
 
     state.selectedSpeechId = speech.id;
     state.selectedVersionId = savedVersionId;
-    state.tab = "versions";
+    state.tab = returnToBullets ? "rehearsal" : "versions";
     closeEditor();
     await loadSpeeches({ silent: true });
+    if (returnToBullets) {
+      scrollTabAnchorIntoView("rehearsal-bullets");
+    }
     setPageStatus(isEdit ? "Script saved." : "New version created.", "ok");
   } catch (error) {
     reportEditorError(error.message || "Could not save that version.");
