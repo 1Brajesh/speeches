@@ -18,6 +18,7 @@ const SCRIPT_PARAGRAPH_SPACING_MIN = 0.6;
 const SCRIPT_PARAGRAPH_SPACING_MAX = 2.6;
 const SCRIPT_PARAGRAPH_SPACING_STEP = 0.05;
 const SCRIPT_PARAGRAPH_SPACING_DEFAULT = 1.2;
+const REHEARSAL_MIN_CARD_SECONDS = 1;
 const REHEARSAL_TIMER_TICK_MS = 250;
 const REHEARSAL_INTRO_DURATION_MS = 1600;
 
@@ -758,21 +759,123 @@ function formatSecondsPerCardLabel(totalSeconds) {
   return `${formatDurationLabel(safeSeconds)} per card`;
 }
 
+function getRehearsalIntroLabel(timing) {
+  if (timing.customDurationCount) {
+    return "Variable timing";
+  }
+
+  return formatSecondsPerCardLabel(timing.intervalMs / 1000);
+}
+
+function formatSecondsValue(totalSeconds, options = {}) {
+  const { precision = 0 } = options;
+  const safeSeconds = Math.max(0, Number(totalSeconds) || 0);
+  const factor = 10 ** precision;
+  const value = precision > 0
+    ? Math.floor(safeSeconds * factor) / factor
+    : Math.floor(safeSeconds);
+
+  return value.toFixed(precision).replace(/\.?0+$/, "");
+}
+
+function parseRehearsalDurationValue(value) {
+  const text = cleanText(value).toLowerCase();
+  const clockMatch = text.match(/^(\d+):([0-5]?\d(?:\.\d+)?)$/);
+
+  if (clockMatch) {
+    const minutes = Number.parseInt(clockMatch[1], 10);
+    const seconds = Number.parseFloat(clockMatch[2]);
+    const totalSeconds = (minutes * 60) + seconds;
+    return totalSeconds > 0 ? totalSeconds : null;
+  }
+
+  const unitMatch = text.match(/^(\d+(?:\.\d+)?)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes)$/);
+
+  if (!unitMatch) {
+    return null;
+  }
+
+  const amount = Number.parseFloat(unitMatch[1]);
+  if (!(amount > 0)) {
+    return null;
+  }
+
+  return unitMatch[2].startsWith("m") ? amount * 60 : amount;
+}
+
+function parseRehearsalCue(rawBullet) {
+  const rawText = cleanText(rawBullet);
+  const directiveMatch = rawText.match(/^(.*?)\s*\/\/\s*([^/]+?)\s*$/);
+
+  if (!directiveMatch) {
+    return {
+      rawText,
+      text: rawText,
+      durationSeconds: null,
+      hasCustomDuration: false,
+    };
+  }
+
+  const durationSeconds = parseRehearsalDurationValue(directiveMatch[2]);
+  const cueText = cleanText(directiveMatch[1]);
+
+  if (!durationSeconds || !cueText) {
+    return {
+      rawText,
+      text: rawText,
+      durationSeconds: null,
+      hasCustomDuration: false,
+    };
+  }
+
+  return {
+    rawText,
+    text: cueText,
+    durationSeconds,
+    hasCustomDuration: true,
+  };
+}
+
+function getRehearsalCues(bullets = []) {
+  return (Array.isArray(bullets) ? bullets : []).map(parseRehearsalCue);
+}
+
 function getRehearsalTiming(version, bullets = version?.rehearsalBullets || []) {
-  const bulletCount = Array.isArray(bullets) ? bullets.length : 0;
+  const cues = getRehearsalCues(bullets);
+  const bulletCount = cues.length;
   const minutes = Math.max(0, Number.parseInt(version?.estimatedMinutes || 0, 10) || 0);
   const totalSeconds = minutes * 60;
-  const intervalMs = bulletCount && totalSeconds > 0
-    ? Math.max(1000, (totalSeconds * 1000) / bulletCount)
+  const customDurationCount = cues.filter((cue) => cue.hasCustomDuration).length;
+  const remainingCueCount = Math.max(0, bulletCount - customDurationCount);
+  const customDurationSeconds = cues.reduce((total, cue) => total + (cue.durationSeconds || 0), 0);
+  const remainingSeconds = Math.max(0, totalSeconds - customDurationSeconds);
+  const defaultDurationSeconds = remainingCueCount > 0 && totalSeconds > 0
+    ? Math.max(REHEARSAL_MIN_CARD_SECONDS, remainingSeconds / remainingCueCount)
     : 0;
+  const cardDurationsMs = cues.map((cue) => {
+    const durationSeconds = cue.durationSeconds || defaultDurationSeconds;
+    return durationSeconds > 0 ? Math.max(REHEARSAL_MIN_CARD_SECONDS * 1000, durationSeconds * 1000) : 0;
+  });
+  const intervalMs = cardDurationsMs[0] || (bulletCount && totalSeconds > 0
+    ? Math.max(REHEARSAL_MIN_CARD_SECONDS * 1000, (totalSeconds * 1000) / bulletCount)
+    : 0);
 
   return {
     bulletCount,
+    cues,
     minutes,
     totalSeconds,
     intervalMs,
+    cardDurationsMs,
+    customDurationCount,
+    defaultDurationSeconds,
+    customDurationsExceedTarget: totalSeconds > 0 && customDurationSeconds > totalSeconds,
     autoAvailable: bulletCount > 0 && minutes > 0,
   };
+}
+
+function getRehearsalCardDurationMs(timing, index = state.rehearsal.index) {
+  return timing.cardDurationsMs?.[index] || timing.intervalMs || 0;
 }
 
 function getEffectiveRehearsalMode(timing) {
@@ -804,6 +907,15 @@ function getRehearsalTimingSummary(timing) {
   const cadence = formatDurationLabel(timing.intervalMs / 1000);
   const bulletLabel = formatCountLabel(timing.bulletCount, "bullet");
   const targetLabel = formatMinuteLabel(timing.minutes);
+  const customLabel = formatCountLabel(timing.customDurationCount, "timed bullet");
+
+  if (timing.customDurationsExceedTarget) {
+    return `Timed bullets exceed the ${targetLabel} target. Custom timings stay strict; untimed cards use the minimum ${REHEARSAL_MIN_CARD_SECONDS}s pace.`;
+  }
+
+  if (timing.customDurationCount) {
+    return `Custom timings are active for ${customLabel}. Untimed cards split the remaining time from a ${targetLabel} target.`;
+  }
 
   if (getEffectiveRehearsalMode(timing) === "auto") {
     return `Auto pacing is selected. Cards will advance every ${cadence} across ${bulletLabel} from a ${targetLabel} target.`;
@@ -821,12 +933,18 @@ function getRehearsalCardTimerLabel(timing) {
     return "Manual";
   }
 
+  const durationSeconds = getRehearsalCardDurationMs(timing) / 1000;
+  const allowedHasFraction = !Number.isInteger(durationSeconds);
+  const precision = allowedHasFraction ? 1 : 0;
+  const allowedLabel = formatSecondsValue(durationSeconds, { precision: allowedHasFraction ? 2 : 0 });
+
   if (isRehearsalIntroActive()) {
-    return "0s";
+    return `0 of ${allowedLabel}s`;
   }
 
-  const elapsedCardSeconds = Math.max(0, Math.floor((Date.now() - state.rehearsal.cardStartedAt) / 1000));
-  return formatDurationLabel(elapsedCardSeconds);
+  const elapsedCardSeconds = Math.max(0, (Date.now() - state.rehearsal.cardStartedAt) / 1000);
+  const elapsedLabel = formatSecondsValue(Math.min(elapsedCardSeconds, durationSeconds), { precision });
+  return `${elapsedLabel} of ${allowedLabel}s`;
 }
 
 function getRehearsalElapsedLabel() {
@@ -867,7 +985,7 @@ function syncRehearsalTickTimer(options = {}) {
 
   if (autoMode && !introActive && hasNextCard && (reset || !state.rehearsal.nextAdvanceAt)) {
     // Reset the next deadline when the user changes cards or mode so each card gets a full interval.
-    state.rehearsal.nextAdvanceAt = state.rehearsal.cardStartedAt + timing.intervalMs;
+    state.rehearsal.nextAdvanceAt = state.rehearsal.cardStartedAt + getRehearsalCardDurationMs(timing);
   } else if (!autoMode || introActive || !hasNextCard) {
     state.rehearsal.nextAdvanceAt = 0;
   }
@@ -922,7 +1040,7 @@ function tickRehearsalTimer() {
     if (!state.rehearsal.cardStartedAt) {
       state.rehearsal.cardStartedAt = Date.now();
     }
-    state.rehearsal.nextAdvanceAt = state.rehearsal.cardStartedAt + timing.intervalMs;
+    state.rehearsal.nextAdvanceAt = state.rehearsal.cardStartedAt + getRehearsalCardDurationMs(timing);
   }
 
   if (autoMode && hasNextCard && Date.now() >= state.rehearsal.nextAdvanceAt) {
@@ -3236,6 +3354,7 @@ function renderRehearsalTab(speech) {
   const version = getSelectedVersionForSpeech(speech);
   const bullets = version?.rehearsalBullets || [];
   const timing = getRehearsalTiming(version, bullets);
+  const cues = timing.cues || [];
   const leftTitle = speech.status === "idea" ? "Idea Prompts" : "Rehearsal Bullets";
   const rightTitle = speech.status === "idea" ? "Prompt View" : "Fullscreen Rehearsal";
   const buttonLabel = speech.status === "idea"
@@ -3247,7 +3366,7 @@ function renderRehearsalTab(speech) {
     : "Open a larger cue card. Tap the right side to advance and the left side to go back.";
   const targetText = version ? `${version.estimatedMinutes} min` : "-";
   const cadenceText = timing.autoAvailable
-    ? `${formatDurationLabel(timing.intervalMs / 1000)} / card`
+    ? (timing.customDurationCount ? "Variable timing" : `${formatDurationLabel(timing.intervalMs / 1000)} / card`)
     : "Set target minutes";
 
   return `
@@ -3259,10 +3378,10 @@ function renderRehearsalTab(speech) {
         </div>
         ${bullets.length ? `
           <div class="bullet-list rehearsal-bullet-list">
-            ${bullets.map((bullet, index) => `
+            ${cues.map((cue, index) => `
               <div class="bullet-card">
                 <strong>Bullet ${String(index + 1).padStart(2, "0")}</strong>
-                <p>${displayText(bullet)}</p>
+                <p>${displayText(cue.text)}</p>
               </div>
             `).join("")}
           </div>
@@ -3707,7 +3826,7 @@ function renderScriptComposer({
         <div class="field">
           <label for="${escapeHtml(bulletsId)}">Rehearsal Bullets</label>
           <textarea id="${escapeHtml(bulletsId)}" name="${escapeHtml(bulletsName)}" data-bullets="true">${escapeHtml(bulletValue)}</textarea>
-          <p class="field-hint">One bullet per line. These feed the rehearsal tab and fullscreen cue mode.</p>
+          <p class="field-hint">One bullet per line. Add a trailing //5s, //1m, or //1:30 to set an auto pacing duration for a cue.</p>
         </div>
       </div>
     </details>
@@ -4961,12 +5080,13 @@ function renderRehearsalScreen(options = {}) {
   state.rehearsal.index = index;
 
   const timing = getRehearsalTiming(version, bullets);
+  const cues = timing.cues || [];
   const progress = ((index + 1) / bullets.length) * 100;
   const nearEnd = bullets.length > 1 && index >= Math.max(1, bullets.length - Math.ceil(bullets.length * 0.25));
   const introActive = isRehearsalIntroActive();
   const stageCopy = introActive
-    ? formatSecondsPerCardLabel(timing.intervalMs / 1000)
-    : bullets[index];
+    ? getRehearsalIntroLabel(timing)
+    : (cues[index]?.text || bullets[index]);
 
   elements.fullscreenModeToggle.innerHTML = renderRehearsalModeToggle(timing, {
     ariaLabel: "Fullscreen rehearsal pacing mode",
