@@ -1093,11 +1093,38 @@
       gap: 8px;
     }
 
+    .bullet-card-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+
     .bullet-card strong {
       font-size: 0.82rem;
       color: var(--faint);
       text-transform: uppercase;
       letter-spacing: 0.12em;
+    }
+
+    .rehearsal-time-chip {
+      flex: 0 0 auto;
+      min-width: 46px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      border: 1px solid rgba(123, 183, 255, 0.28);
+      background: rgba(123, 183, 255, 0.1);
+      color: #cfe6ff;
+      font-size: 0.78rem;
+      font-weight: 700;
+      line-height: 1;
+      text-align: center;
+    }
+
+    .rehearsal-time-chip[data-timing="custom"] {
+      border-color: rgba(242, 200, 118, 0.4);
+      background: rgba(242, 200, 118, 0.14);
+      color: #ffe5a6;
     }
 
     .bullet-card p {
@@ -2569,6 +2596,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260527d"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260527e"></script>
 </body>
 </html>

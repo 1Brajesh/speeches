@@ -882,6 +882,16 @@ function getRehearsalCardDurationMs(timing, index = state.rehearsal.index) {
   return timing.cardDurationsMs?.[index] || timing.intervalMs || 0;
 }
 
+function getRehearsalDurationLabel(timing, index) {
+  const durationSeconds = getRehearsalCardDurationMs(timing, index) / 1000;
+  if (!(durationSeconds > 0)) {
+    return "";
+  }
+
+  const hasFraction = !Number.isInteger(durationSeconds);
+  return `${formatSecondsValue(durationSeconds, { precision: hasFraction ? 2 : 0 })}s`;
+}
+
 function getEffectiveRehearsalMode(timing) {
   return state.rehearsal.mode === "auto" && timing.autoAvailable ? "auto" : "manual";
 }
@@ -3383,7 +3393,12 @@ function renderRehearsalTab(speech) {
           <div class="bullet-list rehearsal-bullet-list">
             ${cues.map((cue, index) => `
               <div class="bullet-card">
-                <strong>Bullet ${String(index + 1).padStart(2, "0")}</strong>
+                <div class="bullet-card-head">
+                  <strong>Bullet ${String(index + 1).padStart(2, "0")}</strong>
+                  ${timing.autoAvailable ? `
+                    <span class="rehearsal-time-chip" data-timing="${cue.hasCustomDuration ? "custom" : "auto"}" title="${cue.hasCustomDuration ? "Custom timing" : "Auto-calculated timing"}">${escapeHtml(getRehearsalDurationLabel(timing, index))}</span>
+                  ` : ""}
+                </div>
                 <p>${displayText(cue.text)}</p>
               </div>
             `).join("")}
