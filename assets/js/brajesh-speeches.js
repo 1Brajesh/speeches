@@ -95,6 +95,7 @@ let rehearsalTickTimer = null;
 let settingsSaveTimer = null;
 let settingsSaveBusy = false;
 let settingsSaveQueued = false;
+let backupBusy = false;
 
 const elements = {
   pageStatus: document.querySelector("#pageStatus"),
@@ -2674,6 +2675,236 @@ function renderPlaybookList() {
   renderPlaybookDetail(selected);
 }
 
+function backupTimestamp() {
+  const now = new Date();
+  const offsetMs = now.getTimezoneOffset() * 60000;
+  return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16).replace("T", "-").replace(":", "");
+}
+
+async function fetchBackupRows(tableName) {
+  const pageSize = 1000;
+  let from = 0;
+  const rows = [];
+
+  while (true) {
+    const { data, error } = await db
+      .from(tableName)
+      .select("*")
+      .range(from, from + pageSize - 1);
+
+    if (error) throw error;
+
+    rows.push(...(data || []));
+
+    if (!data || data.length < pageSize) {
+      return rows;
+    }
+
+    from += pageSize;
+  }
+}
+
+async function loadBackupContent() {
+  const [ideas, speeches, versions, runs, playbook, userSettings] = await Promise.all([
+    fetchBackupRows("brajesh_speech_ideas"),
+    fetchBackupRows("brajesh_speeches"),
+    fetchBackupRows("brajesh_speech_versions"),
+    fetchBackupRows("brajesh_speech_runs"),
+    fetchBackupRows("brajesh_speech_playbook"),
+    fetchBackupRows("brajesh_speech_user_settings"),
+  ]);
+
+  return { ideas, speeches, versions, runs, playbook, userSettings };
+}
+
+function backupLineList(value) {
+  return ensureTextArray(value).filter(Boolean);
+}
+
+function renderBackupMarkdown(content, exportedAt) {
+  const versionsBySpeech = new Map();
+  const runsBySpeech = new Map();
+  const lines = [
+    "# Speeches Backup",
+    "",
+    `Exported: ${exportedAt}`,
+    `Account: ${state.user?.email || "unknown"}`,
+    "",
+    "## Speeches",
+    "",
+  ];
+
+  content.versions.forEach((version) => {
+    const list = versionsBySpeech.get(version.speech_id) || [];
+    list.push(version);
+    versionsBySpeech.set(version.speech_id, list);
+  });
+
+  content.runs.forEach((run) => {
+    const list = runsBySpeech.get(run.speech_id) || [];
+    list.push(run);
+    runsBySpeech.set(run.speech_id, list);
+  });
+
+  [...content.speeches]
+    .sort((a, b) => timestampMs(b.updated_at || b.created_at) - timestampMs(a.updated_at || a.created_at))
+    .forEach((speech) => {
+      lines.push(`### ${speech.title || "Untitled Speech"}`, "");
+      lines.push(`- Status: ${speech.status || "draft"}`);
+      lines.push(`- Goal: ${speech.goal || ""}`);
+      lines.push(`- Tags: ${backupLineList(speech.tags).join(", ")}`);
+      lines.push(`- Updated: ${speech.updated_at || speech.created_at || ""}`, "");
+
+      if (speech.core_idea) lines.push("Core idea:", "", speech.core_idea, "");
+
+      (versionsBySpeech.get(speech.id) || [])
+        .sort((a, b) => timestampMs(a.created_at) - timestampMs(b.created_at))
+        .forEach((version) => {
+          lines.push(`#### Version: ${version.label || "Untitled Version"}`, "");
+          lines.push(`- Target minutes: ${version.estimated_minutes || 0}`);
+          lines.push(`- Updated: ${version.updated_at || version.created_at || ""}`);
+          if (version.revision_note) lines.push(`- Revision note: ${version.revision_note}`);
+          lines.push("");
+          if (version.speech_body) lines.push(version.speech_body, "");
+
+          const bullets = backupLineList(version.rehearsal_bullets);
+          if (bullets.length) {
+            lines.push("Rehearsal bullets:", "");
+            bullets.forEach((bullet) => lines.push(`- ${bullet}`));
+            lines.push("");
+          }
+        });
+
+      const speechRuns = (runsBySpeech.get(speech.id) || [])
+        .sort((a, b) => timestampMs(b.delivered_at || b.created_at) - timestampMs(a.delivered_at || a.created_at));
+      if (speechRuns.length) {
+        lines.push("Runs:", "");
+        speechRuns.forEach((run) => {
+          lines.push(`- ${run.delivered_at || run.created_at || "Undated"} · ${run.location || run.city || "No location"} · ${run.result || "No result"}`);
+        });
+        lines.push("");
+      }
+    });
+
+  lines.push("## Ideas", "");
+  content.ideas.forEach((idea) => {
+    lines.push(`### ${idea.title || "Untitled Idea"}`, "");
+    if (idea.idea_note) lines.push(idea.idea_note, "");
+    lines.push(`- Tags: ${backupLineList(idea.tags).join(", ")}`);
+    lines.push(`- Updated: ${idea.updated_at || idea.created_at || ""}`, "");
+  });
+
+  lines.push("## Playbook", "");
+  content.playbook.forEach((entry) => {
+    lines.push(`### ${entry.title || "Untitled Principle"}`, "");
+    lines.push(`- Category: ${entry.category || ""}`);
+    lines.push(`- Pinned: ${entry.pinned ? "yes" : "no"}`);
+    lines.push(`- Tags: ${backupLineList(entry.tags).join(", ")}`);
+    if (entry.principle) lines.push("", entry.principle);
+    if (entry.why_it_works) lines.push("", `Why it works: ${entry.why_it_works}`);
+    lines.push("");
+  });
+
+  return `${lines.join("\n").trim()}\n`;
+}
+
+function createBackupFiles(content, timestamp) {
+  const exportedAt = new Date().toISOString();
+  const manifest = {
+    exportedAt,
+    exportedBy: state.user?.email || "",
+    app: "speeches.brajesh.com",
+    formatVersion: 1,
+    tables: {
+      ideas: content.ideas.length,
+      speeches: content.speeches.length,
+      versions: content.versions.length,
+      runs: content.runs.length,
+      playbook: content.playbook.length,
+      userSettings: content.userSettings.length,
+    },
+    note: "Browser export of speeches app content tables. This is not a PostgreSQL dump.",
+  };
+  const fullContent = { manifest, tables: content };
+
+  return [
+    { name: "manifest.json", content: JSON.stringify(manifest, null, 2), type: "application/json" },
+    { name: "content.json", content: JSON.stringify(fullContent, null, 2), type: "application/json" },
+    { name: "speeches.md", content: renderBackupMarkdown(content, exportedAt), type: "text/markdown" },
+    { name: "ideas.json", content: JSON.stringify(content.ideas, null, 2), type: "application/json" },
+    { name: "speeches.json", content: JSON.stringify(content.speeches, null, 2), type: "application/json" },
+    { name: "versions.json", content: JSON.stringify(content.versions, null, 2), type: "application/json" },
+    { name: "runs.json", content: JSON.stringify(content.runs, null, 2), type: "application/json" },
+    { name: "playbook.json", content: JSON.stringify(content.playbook, null, 2), type: "application/json" },
+    { name: "user-settings.json", content: JSON.stringify(content.userSettings, null, 2), type: "application/json" },
+    { name: "README.txt", content: `Speeches backup ${timestamp}\n\nChoose the local-backups folder when using the Settings backup button.\ncontent.json contains all exported tables.\nspeeches.md is a readable copy of speeches, versions, bullets, runs, ideas, and playbook entries.\n`, type: "text/plain" },
+  ];
+}
+
+async function writeBackupFilesToDirectory(folderName, files) {
+  const rootHandle = await window.showDirectoryPicker({
+    id: "brajesh-speeches-backups",
+    mode: "readwrite",
+    startIn: "documents",
+  });
+  const backupHandle = await rootHandle.getDirectoryHandle(folderName, { create: true });
+
+  await Promise.all(files.map(async (file) => {
+    const fileHandle = await backupHandle.getFileHandle(file.name, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(new Blob([file.content], { type: file.type }));
+    await writable.close();
+  }));
+}
+
+function downloadBackupFiles(folderName, files) {
+  files
+    .filter((file) => file.name === "content.json" || file.name === "speeches.md" || file.name === "manifest.json")
+    .forEach((file) => {
+      const url = URL.createObjectURL(new Blob([file.content], { type: file.type }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${folderName}-${file.name}`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+}
+
+async function backupContentToLocalFolder() {
+  if (backupBusy) return;
+
+  backupBusy = true;
+  renderApp();
+  setPageStatus("Preparing content backup...");
+
+  try {
+    const timestamp = backupTimestamp();
+    const folderName = `speeches-backup-${timestamp}`;
+    const content = await loadBackupContent();
+    const files = createBackupFiles(content, timestamp);
+
+    if ("showDirectoryPicker" in window) {
+      setPageStatus("Choose the local-backups folder for this backup.");
+      await writeBackupFilesToDirectory(folderName, files);
+      setPageStatus(`Backup saved in ${folderName}.`, "ok");
+    } else {
+      downloadBackupFiles(folderName, files);
+      setPageStatus("Folder backup is not supported in this browser, so backup files were downloaded.", "ok");
+    }
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      setPageStatus("Backup cancelled.");
+    } else {
+      setPageStatus(error.message || "Could not create backup.", "error");
+    }
+  } finally {
+    backupBusy = false;
+    renderApp();
+  }
+}
+
 function renderSettingsBody() {
   return `
     <div class="reader-stack">
@@ -2688,6 +2919,20 @@ function renderSettingsBody() {
         <p class="status" data-settings-status>${escapeHtml(state.settings.message)}</p>
         <div class="panel-tools">
           ${renderScriptReadingControls()}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="panel-head">
+          <div>
+            <h4>Content Backup</h4>
+            <p class="helper-copy">Export speeches, versions, runs, ideas, playbook entries, and reading settings into your ignored local backup folder.</p>
+          </div>
+          <span class="meta-chip">Local files</span>
+        </div>
+        <div class="button-row">
+          <button class="primary-button" type="button" data-action="backup-content" ${backupBusy ? "disabled" : ""}>${backupBusy ? "Backing Up..." : "Back Up Content"}</button>
+          <span class="helper-copy">When prompted, choose <code>local-backups</code>. A timestamped folder will be created inside it.</span>
         </div>
       </div>
 
@@ -5204,6 +5449,11 @@ async function runAction(action) {
   if (action === "show-settings") {
     state.workspaceView = "settings";
     renderApp();
+    return;
+  }
+
+  if (action === "backup-content") {
+    await backupContentToLocalFolder();
     return;
   }
 
