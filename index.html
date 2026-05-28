@@ -2399,7 +2399,7 @@
       }
     }
 
-    @media (max-width: 940px) and (orientation: landscape) {
+    @media (max-width: 1180px) and (orientation: landscape) {
       .fullscreen-body {
         padding: 10px 18px;
       }
@@ -2410,8 +2410,12 @@
         padding: clamp(24px, 4vw, 38px);
       }
 
+      .fullscreen-bullet[data-cue-size="short"] {
+        max-width: min(30ch, 84vw);
+      }
+
       .fullscreen-bullet[data-cue-size="medium"] {
-        max-width: min(40ch, 88vw);
+        max-width: min(46ch, 88vw);
         font-size: clamp(1.45rem, 3vw, 2.35rem);
       }
 
@@ -2634,6 +2638,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260528c"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260528d"></script>
 </body>
 </html>

@@ -771,7 +771,7 @@ function getRehearsalIntroLabel(timing) {
 function getRehearsalCueSize(text) {
   const length = String(text || "").trim().length;
   if (length > 150) return "long";
-  if (length > 80) return "medium";
+  if (length > 60) return "medium";
   return "short";
 }
 
