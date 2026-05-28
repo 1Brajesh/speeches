@@ -2858,18 +2858,17 @@ async function writeBackupFilesToDirectory(folderName, files) {
 }
 
 function downloadBackupFiles(folderName, files) {
-  files
-    .filter((file) => file.name === "content.json" || file.name === "speeches.md" || file.name === "manifest.json")
-    .forEach((file) => {
-      const url = URL.createObjectURL(new Blob([file.content], { type: file.type }));
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `${folderName}-${file.name}`;
-      document.body.append(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    });
+  const contentFile = files.find((file) => file.name === "content.json");
+  if (!contentFile) return;
+
+  const url = URL.createObjectURL(new Blob([contentFile.content], { type: contentFile.type }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${folderName}.json`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 async function backupContentToLocalFolder() {
@@ -2891,7 +2890,7 @@ async function backupContentToLocalFolder() {
       setPageStatus(`Backup saved in ${folderName}.`, "ok");
     } else {
       downloadBackupFiles(folderName, files);
-      setPageStatus("Folder backup is not supported in this browser, so backup files were downloaded.", "ok");
+      setPageStatus("Folder backup is not supported in this browser, so one complete JSON backup was downloaded.", "ok");
     }
   } catch (error) {
     if (error?.name === "AbortError") {
