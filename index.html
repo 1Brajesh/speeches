@@ -2164,6 +2164,10 @@
       width: 100%;
     }
 
+    .fullscreen-mobile-status {
+      display: none;
+    }
+
     .fullscreen-mode-toggle {
       justify-content: flex-end;
     }
@@ -2406,6 +2410,7 @@
 
       .fullscreen-footer,
       .fullscreen-mode-toggle,
+      .fullscreen-stage-head,
       #prevBulletButton,
       #nextBulletButton {
         display: none;
@@ -2416,16 +2421,28 @@
       }
 
       .fullscreen-controls {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
         justify-content: flex-end;
       }
 
+      .fullscreen-mobile-status {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        min-width: 0;
+      }
+
       .fullscreen-body {
+        min-height: 0;
         padding: 2px 18px 12px;
       }
 
       .fullscreen-stage {
+        height: 100%;
         width: min(1040px, 100%);
-        min-height: min(68vh, 430px);
+        min-height: 0;
         padding: clamp(26px, 4vw, 38px) clamp(34px, 6vw, 58px);
       }
 
@@ -2484,6 +2501,7 @@
 
       .fullscreen-footer,
       .fullscreen-mode-toggle,
+      .fullscreen-stage-head,
       #prevBulletButton,
       #nextBulletButton {
         display: none;
@@ -2494,7 +2512,17 @@
       }
 
       .fullscreen-controls {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
         justify-content: flex-end;
+      }
+
+      .fullscreen-mobile-status {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        min-width: 0;
       }
 
       .fullscreen-controls .button-row {
@@ -2522,24 +2550,20 @@
 
       .fullscreen-body {
         align-items: start;
+        min-height: 0;
         padding: 4px 14px 12px;
       }
 
       .fullscreen-stage {
+        height: 100%;
         width: 100%;
-        min-height: min(74vh, 780px);
-        padding: 74px 22px 38px;
+        min-height: 0;
+        padding: 32px 22px 36px;
         border-radius: 28px;
       }
 
-      .fullscreen-stage-head {
-        top: 24px;
-        left: 22px;
-        right: 22px;
-      }
-
       .fullscreen-stage-chip {
-        min-width: 86px;
+        min-width: 78px;
         padding: 9px 12px;
         font-size: 1rem;
       }
@@ -2699,6 +2723,10 @@
   <section class="fullscreen" id="fullscreenRehearsal" hidden>
     <div class="fullscreen-bar">
       <div class="fullscreen-controls">
+        <div class="fullscreen-mobile-status" aria-hidden="true">
+          <span class="fullscreen-stage-chip" data-chip="card" id="mobileFullscreenCardTimer">Manual</span>
+          <span class="fullscreen-stage-chip" id="mobileFullscreenElapsedTimer">0:00</span>
+        </div>
         <div id="fullscreenModeToggle"></div>
         <div class="button-row">
           <button class="ghost-button" type="button" id="prevBulletButton">Previous</button>
@@ -2729,6 +2757,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260528g"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260528h"></script>
 </body>
 </html>

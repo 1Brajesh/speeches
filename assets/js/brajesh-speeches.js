@@ -151,6 +151,8 @@ const elements = {
   fullscreenModeToggle: document.querySelector("#fullscreenModeToggle"),
   fullscreenCardTimer: document.querySelector("#fullscreenCardTimer"),
   fullscreenElapsedTimer: document.querySelector("#fullscreenElapsedTimer"),
+  mobileFullscreenCardTimer: document.querySelector("#mobileFullscreenCardTimer"),
+  mobileFullscreenElapsedTimer: document.querySelector("#mobileFullscreenElapsedTimer"),
   fullscreenBullet: document.querySelector("#fullscreenBullet"),
   fullscreenProgress: document.querySelector("#fullscreenProgress"),
   prevBulletButton: document.querySelector("#prevBulletButton"),
@@ -1017,8 +1019,12 @@ function syncRehearsalTickTimer(options = {}) {
 }
 
 function updateRehearsalCardTimers(timing) {
-  elements.fullscreenCardTimer.textContent = getRehearsalCardTimerLabel(timing);
-  elements.fullscreenElapsedTimer.textContent = getRehearsalElapsedLabel();
+  const cardLabel = getRehearsalCardTimerLabel(timing);
+  const elapsedLabel = getRehearsalElapsedLabel();
+  elements.fullscreenCardTimer.textContent = cardLabel;
+  elements.fullscreenElapsedTimer.textContent = elapsedLabel;
+  elements.mobileFullscreenCardTimer.textContent = cardLabel;
+  elements.mobileFullscreenElapsedTimer.textContent = elapsedLabel;
 }
 
 function tickRehearsalTimer() {
