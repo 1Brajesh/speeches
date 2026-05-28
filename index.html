@@ -2257,6 +2257,20 @@
       overflow-wrap: anywhere;
     }
 
+    .fullscreen-bullet[data-cue-size="medium"] {
+      max-width: min(28ch, 82vw);
+      font-size: clamp(1.65rem, 3.3vw, 3.45rem);
+      line-height: 1.18;
+      letter-spacing: -0.02em;
+    }
+
+    .fullscreen-bullet[data-cue-size="long"] {
+      max-width: min(36ch, 86vw);
+      font-size: clamp(1.35rem, 2.55vw, 2.75rem);
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
     .fullscreen-body[data-intro-active="true"] .fullscreen-bullet {
       max-width: 24ch;
       font-size: clamp(1.8rem, 3.4vw, 3rem);
@@ -2382,6 +2396,30 @@
       .fullscreen-controls {
         width: 100%;
         justify-content: space-between;
+      }
+    }
+
+    @media (max-width: 940px) and (orientation: landscape) {
+      .fullscreen-body {
+        padding: 10px 18px;
+      }
+
+      .fullscreen-stage {
+        width: min(960px, 100%);
+        min-height: min(54vh, 380px);
+        padding: clamp(24px, 4vw, 38px);
+      }
+
+      .fullscreen-bullet[data-cue-size="medium"] {
+        max-width: min(40ch, 88vw);
+        font-size: clamp(1.45rem, 3vw, 2.35rem);
+      }
+
+      .fullscreen-bullet[data-cue-size="long"] {
+        max-width: min(54ch, 90vw);
+        max-height: 48vh;
+        font-size: clamp(1.1rem, 2.35vw, 1.9rem);
+        line-height: 1.22;
       }
     }
 
@@ -2596,6 +2634,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260528b"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260528c"></script>
 </body>
 </html>

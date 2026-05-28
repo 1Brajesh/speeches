@@ -768,6 +768,13 @@ function getRehearsalIntroLabel(timing) {
   return formatSecondsPerCardLabel(timing.intervalMs / 1000);
 }
 
+function getRehearsalCueSize(text) {
+  const length = String(text || "").trim().length;
+  if (length > 150) return "long";
+  if (length > 80) return "medium";
+  return "short";
+}
+
 function formatSecondsValue(totalSeconds, options = {}) {
   const { precision = 0 } = options;
   const safeSeconds = Math.max(0, Number(totalSeconds) || 0);
@@ -5355,6 +5362,7 @@ function renderRehearsalScreen(options = {}) {
     extraClassName: "fullscreen-mode-toggle",
   });
   elements.fullscreenBody.dataset.introActive = String(introActive);
+  elements.fullscreenBullet.dataset.cueSize = introActive ? "intro" : getRehearsalCueSize(stageCopy);
   elements.fullscreenBullet.textContent = stageCopy;
   elements.fullscreenProgress.style.width = `${progress}%`;
   elements.fullscreenProgress.dataset.nearEnd = String(nearEnd);
