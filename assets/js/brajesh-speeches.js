@@ -96,6 +96,7 @@ let settingsSaveTimer = null;
 let settingsSaveBusy = false;
 let settingsSaveQueued = false;
 let backupBusy = false;
+let rehearsalFitFrame = 0;
 
 const elements = {
   pageStatus: document.querySelector("#pageStatus"),
@@ -775,6 +776,80 @@ function getRehearsalCueSize(text) {
   if (length > 150) return "long";
   if (length > 60) return "medium";
   return "short";
+}
+
+function rehearsalCueFitProfile(cueSize, viewportWidth, viewportHeight) {
+  const mobilePortrait = viewportWidth <= 620 && viewportHeight >= viewportWidth;
+  const mobileLandscape = viewportWidth <= 1180 && viewportWidth > viewportHeight;
+
+  if (cueSize === "intro") {
+    return { widthRatio: 0.78, minFont: 28, maxFont: mobilePortrait ? 42 : 48, lineHeight: 1.1 };
+  }
+
+  if (mobilePortrait) {
+    if (cueSize === "short") return { widthRatio: 0.9, minFont: 36, maxFont: 74, lineHeight: 1.06 };
+    if (cueSize === "medium") return { widthRatio: 0.94, minFont: 30, maxFont: 58, lineHeight: 1.07 };
+    return { widthRatio: 0.96, minFont: 24, maxFont: 48, lineHeight: 1.08 };
+  }
+
+  if (mobileLandscape) {
+    if (cueSize === "short") return { widthRatio: 0.82, minFont: 36, maxFont: 72, lineHeight: 1.06 };
+    if (cueSize === "medium") return { widthRatio: 0.94, minFont: 30, maxFont: 58, lineHeight: 1.08 };
+    return { widthRatio: 0.96, minFont: 22, maxFont: 42, lineHeight: 1.1 };
+  }
+
+  if (cueSize === "short") return { widthRatio: 0.68, minFont: 42, maxFont: 82, lineHeight: 1.08 };
+  if (cueSize === "medium") return { widthRatio: 0.82, minFont: 34, maxFont: 66, lineHeight: 1.1 };
+  return { widthRatio: 0.9, minFont: 26, maxFont: 54, lineHeight: 1.12 };
+}
+
+function fitFullscreenCueText() {
+  if (elements.fullscreenRehearsal.hidden) return;
+
+  const bullet = elements.fullscreenBullet;
+  const stage = bullet.closest(".fullscreen-stage");
+  if (!stage) return;
+
+  const viewportWidth = window.visualViewport?.width || window.innerWidth || document.documentElement.clientWidth;
+  const viewportHeight = window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight;
+  const cueSize = bullet.dataset.cueSize || "short";
+  const stageStyle = window.getComputedStyle(stage);
+  const paddingX = Number.parseFloat(stageStyle.paddingLeft) + Number.parseFloat(stageStyle.paddingRight);
+  const paddingY = Number.parseFloat(stageStyle.paddingTop) + Number.parseFloat(stageStyle.paddingBottom);
+  const availableWidth = Math.max(120, stage.clientWidth - paddingX);
+  const availableHeight = Math.max(120, stage.clientHeight - paddingY);
+  const profile = rehearsalCueFitProfile(cueSize, viewportWidth, viewportHeight);
+  const targetWidth = Math.max(120, Math.floor(availableWidth * profile.widthRatio));
+
+  bullet.style.width = `${targetWidth}px`;
+  bullet.style.maxWidth = `${targetWidth}px`;
+  bullet.style.maxHeight = `${availableHeight}px`;
+  bullet.style.lineHeight = String(profile.lineHeight);
+  bullet.style.transform = "";
+
+  let low = profile.minFont;
+  let high = Math.min(profile.maxFont, Math.max(profile.minFont, availableHeight * 0.42));
+  let best = low;
+
+  for (let index = 0; index < 8; index += 1) {
+    const next = (low + high) / 2;
+    bullet.style.fontSize = `${next}px`;
+
+    const fits = bullet.scrollHeight <= availableHeight + 1 && bullet.scrollWidth <= targetWidth + 1;
+    if (fits) {
+      best = next;
+      low = next;
+    } else {
+      high = next;
+    }
+  }
+
+  bullet.style.fontSize = `${Math.floor(best * 10) / 10}px`;
+}
+
+function scheduleFullscreenCueFit() {
+  window.cancelAnimationFrame(rehearsalFitFrame);
+  rehearsalFitFrame = window.requestAnimationFrame(fitFullscreenCueText);
 }
 
 function formatSecondsValue(totalSeconds, options = {}) {
@@ -5370,10 +5445,12 @@ function renderRehearsalScreen(options = {}) {
   elements.fullscreenBody.dataset.introActive = String(introActive);
   elements.fullscreenBullet.dataset.cueSize = introActive ? "intro" : getRehearsalCueSize(stageCopy);
   elements.fullscreenBullet.textContent = stageCopy;
+  elements.fullscreenBullet.removeAttribute("style");
   elements.fullscreenProgress.style.width = `${progress}%`;
   elements.fullscreenProgress.dataset.nearEnd = String(nearEnd);
   elements.prevBulletButton.disabled = introActive || index === 0;
   elements.nextBulletButton.disabled = introActive || index === bullets.length - 1;
+  scheduleFullscreenCueFit();
   syncRehearsalTickTimer({ timing, reset: resetAutoTimer });
   updateRehearsalCardTimers(timing);
 }
@@ -5935,6 +6012,10 @@ document.addEventListener("toggle", (event) => {
     collapseLabel.textContent = panel.open ? "Collapse" : "Expand";
   }
 }, true);
+
+window.addEventListener("resize", scheduleFullscreenCueFit);
+window.addEventListener("orientationchange", scheduleFullscreenCueFit);
+window.visualViewport?.addEventListener("resize", scheduleFullscreenCueFit);
 
 db.auth.onAuthStateChange((event, session) => {
   if (!["SIGNED_IN", "SIGNED_OUT", "USER_UPDATED"].includes(event)) {
