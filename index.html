@@ -2240,6 +2240,7 @@
     }
 
     .fullscreen-stage-chip {
+      flex: 0 0 auto;
       min-width: 72px;
       padding: 8px 12px;
       border-radius: 999px;
@@ -2251,9 +2252,12 @@
       font-weight: 600;
       letter-spacing: 0.02em;
       text-align: center;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
     }
 
     .fullscreen-stage-chip[data-chip="card"] {
+      min-width: max(96px, 9.5ch);
       border-color: rgba(123, 183, 255, 0.38);
       background: linear-gradient(180deg, rgba(123, 183, 255, 0.32), rgba(63, 111, 156, 0.26));
       color: #e9f4ff;
@@ -2596,9 +2600,13 @@
       }
 
       .fullscreen-stage-chip {
-        min-width: 72px;
+        min-width: 68px;
         padding: 8px 10px;
         font-size: 0.92rem;
+      }
+
+      .fullscreen-stage-chip[data-chip="card"] {
+        min-width: max(104px, 10ch);
       }
 
       .fullscreen-body:not([data-intro-active="true"]) .fullscreen-bullet {
@@ -2791,6 +2799,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260528m"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260528n"></script>
 </body>
 </html>
