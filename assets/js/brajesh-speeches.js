@@ -871,7 +871,8 @@ function formatSecondsValue(totalSeconds, options = {}) {
     return "0";
   }
 
-  return value.toFixed(precision).replace(/\.?0+$/, "");
+  const label = value.toFixed(precision);
+  return precision > 0 ? label.replace(/\.?0+$/, "") : label;
 }
 
 function parseRehearsalDurationValue(value) {
