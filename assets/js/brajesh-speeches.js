@@ -939,7 +939,6 @@ function getRehearsalCardTimerLabel(timing) {
 
   const durationSeconds = getRehearsalCardDurationMs(timing) / 1000;
   const allowedHasFraction = !Number.isInteger(durationSeconds);
-  const precision = allowedHasFraction ? 1 : 0;
   const allowedLabel = formatSecondsValue(durationSeconds, { precision: allowedHasFraction ? 2 : 0 });
 
   if (isRehearsalIntroActive()) {
@@ -947,7 +946,7 @@ function getRehearsalCardTimerLabel(timing) {
   }
 
   const elapsedCardSeconds = Math.max(0, (Date.now() - state.rehearsal.cardStartedAt) / 1000);
-  const elapsedLabel = formatSecondsValue(Math.min(elapsedCardSeconds, durationSeconds), { precision });
+  const elapsedLabel = formatSecondsValue(Math.min(elapsedCardSeconds, durationSeconds));
   return `${elapsedLabel} of ${allowedLabel}s`;
 }
 
