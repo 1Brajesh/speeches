@@ -2400,13 +2400,32 @@
     }
 
     @media (max-width: 1180px) and (orientation: landscape) {
+      .fullscreen {
+        grid-template-rows: auto 1fr;
+      }
+
+      .fullscreen-footer,
+      .fullscreen-mode-toggle,
+      #prevBulletButton,
+      #nextBulletButton {
+        display: none;
+      }
+
+      .fullscreen-bar {
+        padding: 10px 18px 2px;
+      }
+
+      .fullscreen-controls {
+        justify-content: flex-end;
+      }
+
       .fullscreen-body {
-        padding: 10px 18px;
+        padding: 2px 18px 12px;
       }
 
       .fullscreen-stage {
         width: min(1040px, 100%);
-        min-height: min(54vh, 380px);
+        min-height: min(68vh, 430px);
         padding: clamp(26px, 4vw, 38px) clamp(34px, 6vw, 58px);
       }
 
@@ -2427,7 +2446,7 @@
 
       .fullscreen-bullet[data-cue-size="long"] {
         max-width: min(56ch, 90vw);
-        max-height: 48vh;
+        max-height: 62vh;
         font-size: clamp(1.45rem, 3.35vw, 2.35rem);
         line-height: 1.15;
       }
@@ -2459,32 +2478,32 @@
         padding-top: 24px;
       }
 
-      .fullscreen-bar,
-      .fullscreen-footer {
+      .fullscreen {
+        grid-template-rows: auto 1fr;
+      }
+
+      .fullscreen-footer,
+      .fullscreen-mode-toggle,
+      #prevBulletButton,
+      #nextBulletButton {
+        display: none;
+      }
+
+      .fullscreen-bar {
         padding: 10px 16px;
       }
 
       .fullscreen-controls {
-        gap: 10px;
-      }
-
-      .fullscreen-mode-toggle {
-        flex: 1 1 100%;
-        justify-content: start;
+        justify-content: flex-end;
       }
 
       .fullscreen-controls .button-row {
-        width: 100%;
-        display: grid;
-        grid-template-columns: 1fr 1fr 0.9fr;
-        gap: 10px;
+        justify-content: flex-end;
       }
 
-      .fullscreen-controls .button-row .ghost-button,
-      .fullscreen-controls .button-row .primary-button,
-      .fullscreen-mode-toggle .tab-pill {
+      .fullscreen-controls .button-row .primary-button {
         min-height: 52px;
-        padding: 0 14px;
+        padding: 0 24px;
       }
 
       .editor-grid {
@@ -2503,12 +2522,12 @@
 
       .fullscreen-body {
         align-items: start;
-        padding: 8px 14px 12px;
+        padding: 4px 14px 12px;
       }
 
       .fullscreen-stage {
         width: 100%;
-        min-height: min(62vh, 680px);
+        min-height: min(74vh, 780px);
         padding: 74px 22px 38px;
         border-radius: 28px;
       }
@@ -2543,13 +2562,9 @@
 
       .fullscreen-bullet[data-cue-size="long"] {
         max-width: min(31ch, 84vw);
-        max-height: 48vh;
+        max-height: 60vh;
         font-size: clamp(1.82rem, 7vw, 2.62rem);
         line-height: 1.12;
-      }
-
-      .fullscreen-hint {
-        font-size: 0.9rem;
       }
 
       .text-size-control {
@@ -2714,6 +2729,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260528f"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260528g"></script>
 </body>
 </html>
