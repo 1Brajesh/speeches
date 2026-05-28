@@ -91,6 +91,7 @@ let speechDeleteBusy = false;
 let versionDeleteBusy = false;
 let playbookDeleteBusy = false;
 const speechDetailPromises = new Map();
+const speechDetailGenerations = new Map();
 let speechSearchTimer = null;
 let speechSearchRequestToken = 0;
 let rehearsalTickTimer = null;
@@ -259,6 +260,7 @@ function resetSpeechState() {
   state.speeches = [];
   state.playbookEntries = [];
   speechDetailPromises.clear();
+  speechDetailGenerations.clear();
   window.clearTimeout(speechSearchTimer);
   speechSearchTimer = null;
   window.clearTimeout(settingsSaveTimer);
@@ -1455,10 +1457,28 @@ function applySpeechDetail(speechId, versionRows, runRows) {
   return speech;
 }
 
+function invalidateSpeechDetail(speechId) {
+  if (!speechId) return;
+
+  speechDetailGenerations.set(speechId, (speechDetailGenerations.get(speechId) || 0) + 1);
+  speechDetailPromises.delete(speechId);
+
+  const speech = getSpeechById(speechId);
+  if (speech) {
+    speech.detailLoaded = false;
+    speech.detailLoading = false;
+    speech.detailError = "";
+  }
+}
+
 async function loadSpeechDetail(speechId, options = {}) {
   const { force = false, renderPending = false, renderAfter = true } = options;
   const speech = getSpeechById(speechId);
   if (!speech) return null;
+
+  if (force) {
+    invalidateSpeechDetail(speechId);
+  }
 
   if (speech.detailLoaded && !force) {
     return speech;
@@ -1476,7 +1496,9 @@ async function loadSpeechDetail(speechId, options = {}) {
     renderApp();
   }
 
-  const promise = Promise.all([
+  const requestGeneration = speechDetailGenerations.get(speechId) || 0;
+  let promise;
+  promise = Promise.all([
     db
       .from("brajesh_speech_versions")
       .select("id, speech_id, based_on_version_id, label, estimated_minutes, revision_note, speech_body, rehearsal_bullets, created_at, updated_at")
@@ -1492,8 +1514,16 @@ async function loadSpeechDetail(speechId, options = {}) {
     if (versionResult.error) throw versionResult.error;
     if (runResult.error) throw runResult.error;
 
+    if ((speechDetailGenerations.get(speechId) || 0) !== requestGeneration) {
+      return getSpeechById(speechId);
+    }
+
     return applySpeechDetail(speechId, versionResult.data, runResult.data);
   }).catch((error) => {
+    if ((speechDetailGenerations.get(speechId) || 0) !== requestGeneration) {
+      return getSpeechById(speechId);
+    }
+
     const currentSpeech = getSpeechById(speechId);
     if (currentSpeech) {
       currentSpeech.detailError = error.message || "Could not load this speech.";
@@ -1501,13 +1531,17 @@ async function loadSpeechDetail(speechId, options = {}) {
     setPageStatus(error.message || "Could not load that speech.", "error");
     throw error;
   }).finally(() => {
+    const isCurrentRequest = speechDetailPromises.get(speechId) === promise
+      && (speechDetailGenerations.get(speechId) || 0) === requestGeneration;
     const currentSpeech = getSpeechById(speechId);
-    if (currentSpeech) {
+    if (currentSpeech && isCurrentRequest) {
       currentSpeech.detailLoading = false;
     }
-    speechDetailPromises.delete(speechId);
+    if (speechDetailPromises.get(speechId) === promise) {
+      speechDetailPromises.delete(speechId);
+    }
 
-    if (renderAfter) {
+    if (renderAfter && isCurrentRequest) {
       renderApp();
     }
   });
@@ -1634,6 +1668,8 @@ function mapPlaybookData(playbookRows) {
 }
 
 async function loadSpeeches(options = {}) {
+  const { forceSelectedDetail = false } = options;
+
   if (!options.silent) {
     setPageStatus("Loading speeches.");
   }
@@ -1687,7 +1723,10 @@ async function loadSpeeches(options = {}) {
     const selectedSpeech = ensureSelection();
     if (selectedSpeech) {
       try {
-        await loadSpeechDetail(selectedSpeech.id, { renderAfter: false });
+        await loadSpeechDetail(selectedSpeech.id, {
+          force: forceSelectedDetail,
+          renderAfter: false,
+        });
       } catch {
         // Keep the library usable even if the selected speech detail fails to load.
       }
@@ -4953,7 +4992,7 @@ async function saveSpeech(formData) {
     }
 
     closeEditor();
-    await loadSpeeches({ silent: true });
+    await loadSpeeches({ silent: true, forceSelectedDetail: state.workspaceView === "speeches" });
     setPageStatus(isEdit ? "Speech metadata saved." : "Speech created.", "ok");
   } catch (error) {
     reportEditorError(error.message || "Could not save that speech.");
@@ -5026,7 +5065,7 @@ async function saveVersion(formData) {
     state.selectedVersionId = savedVersionId;
     state.tab = returnToBullets ? "rehearsal" : "versions";
     closeEditor();
-    await loadSpeeches({ silent: true });
+    await loadSpeeches({ silent: true, forceSelectedDetail: true });
     if (returnToBullets) {
       scrollTabAnchorIntoView("rehearsal-bullets");
     }
@@ -5101,7 +5140,7 @@ async function saveDelivery(formData) {
     state.selectedDeliveryId = savedRunId;
     state.tab = "runs";
     closeEditor();
-    await loadSpeeches({ silent: true });
+    await loadSpeeches({ silent: true, forceSelectedDetail: true });
     setPageStatus(isEdit ? "Run saved." : "Run logged.", "ok");
   } catch (error) {
     reportEditorError(error.message || "Could not save that run.");
@@ -5255,7 +5294,7 @@ async function deleteIdeaEntry(ideaId = state.editor.ideaId || state.selectedIde
     }
 
     state.workspaceView = "ideas";
-    await loadSpeeches({ silent: true });
+    await loadSpeeches({ silent: true, forceSelectedDetail: Boolean(state.selectedSpeechId) });
     setPageStatus(`Deleted "${idea.title}".`, "ok");
   } catch (error) {
     setPageStatus(error.message || `Could not delete "${idea.title}".`, "error");
@@ -5346,7 +5385,7 @@ async function deletePlaybookEntry(playbookId = state.editor.playbookId || state
     }
 
     state.workspaceView = "playbook";
-    await loadSpeeches({ silent: true });
+    await loadSpeeches({ silent: true, forceSelectedDetail: Boolean(state.selectedSpeechId) });
     setPageStatus(`Deleted "${entry.title}".`, "ok");
   } catch (error) {
     setPageStatus(error.message || `Could not delete "${entry.title}".`, "error");
@@ -5435,7 +5474,7 @@ async function deleteVersion() {
       closeRehearsal();
     }
 
-    await loadSpeeches({ silent: true });
+    await loadSpeeches({ silent: true, forceSelectedDetail: true });
     setPageStatus(`Deleted version "${version.label}".`, "ok");
   } catch (error) {
     setPageStatus(error.message || `Could not delete version "${version.label}".`, "error");
