@@ -775,6 +775,10 @@ function formatSecondsValue(totalSeconds, options = {}) {
     ? Math.floor(safeSeconds * factor) / factor
     : Math.floor(safeSeconds);
 
+  if (value === 0) {
+    return "0";
+  }
+
   return value.toFixed(precision).replace(/\.?0+$/, "");
 }
 
