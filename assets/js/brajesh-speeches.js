@@ -54,6 +54,8 @@ const state = {
     startedAt: 0,
     cardStartedAt: 0,
     introEndsAt: 0,
+    paused: false,
+    pausedAt: 0,
   },
   preferences: createDefaultPreferences(),
   settings: {
@@ -154,6 +156,7 @@ const elements = {
   fullscreenElapsedTimer: document.querySelector("#fullscreenElapsedTimer"),
   mobileFullscreenCardTimer: document.querySelector("#mobileFullscreenCardTimer"),
   mobileFullscreenElapsedTimer: document.querySelector("#mobileFullscreenElapsedTimer"),
+  pauseRehearsalButton: document.querySelector("#pauseRehearsalButton"),
   fullscreenBullet: document.querySelector("#fullscreenBullet"),
   fullscreenProgress: document.querySelector("#fullscreenProgress"),
   prevBulletButton: document.querySelector("#prevBulletButton"),
@@ -282,6 +285,8 @@ function resetSpeechState() {
   state.rehearsal.startedAt = 0;
   state.rehearsal.cardStartedAt = 0;
   state.rehearsal.introEndsAt = 0;
+  state.rehearsal.paused = false;
+  state.rehearsal.pausedAt = 0;
   state.preferences = createDefaultPreferences();
   state.settings.loaded = false;
   state.settings.saving = false;
@@ -981,6 +986,18 @@ function getEffectiveRehearsalMode(timing) {
   return state.rehearsal.mode === "auto" && timing.autoAvailable ? "auto" : "manual";
 }
 
+function isRehearsalPauseAvailable(timing) {
+  return getEffectiveRehearsalMode(timing) === "auto" && timing.autoAvailable;
+}
+
+function syncRehearsalPauseButton(timing) {
+  const available = isRehearsalPauseAvailable(timing);
+  elements.pauseRehearsalButton.hidden = !available;
+  elements.pauseRehearsalButton.setAttribute("aria-pressed", String(state.rehearsal.paused));
+  elements.pauseRehearsalButton.setAttribute("aria-label", state.rehearsal.paused ? "Resume rehearsal" : "Pause rehearsal");
+  elements.pauseRehearsalButton.textContent = state.rehearsal.paused ? "▶" : "Ⅱ";
+}
+
 function renderRehearsalModeToggle(timing, options = {}) {
   const { ariaLabel = "Rehearsal pacing mode", extraClassName = "" } = options;
   const mode = getEffectiveRehearsalMode(timing);
@@ -1024,7 +1041,8 @@ function getRehearsalTimingSummary(timing) {
 }
 
 function isRehearsalIntroActive() {
-  return state.rehearsal.introEndsAt > Date.now();
+  const now = state.rehearsal.paused ? state.rehearsal.pausedAt : Date.now();
+  return state.rehearsal.introEndsAt > now;
 }
 
 function getRehearsalCardTimerLabel(timing) {
@@ -1040,7 +1058,8 @@ function getRehearsalCardTimerLabel(timing) {
     return `0 of ${allowedLabel}s`;
   }
 
-  const elapsedCardSeconds = Math.max(0, (Date.now() - state.rehearsal.cardStartedAt) / 1000);
+  const now = state.rehearsal.paused ? state.rehearsal.pausedAt : Date.now();
+  const elapsedCardSeconds = Math.max(0, (now - state.rehearsal.cardStartedAt) / 1000);
   const elapsedLabel = formatSecondsValue(Math.min(elapsedCardSeconds, durationSeconds));
   return `${elapsedLabel} of ${allowedLabel}s`;
 }
@@ -1050,7 +1069,8 @@ function getRehearsalElapsedLabel() {
     return "0:00";
   }
 
-  const elapsedSeconds = (Date.now() - state.rehearsal.startedAt) / 1000;
+  const now = state.rehearsal.paused ? state.rehearsal.pausedAt : Date.now();
+  const elapsedSeconds = (now - state.rehearsal.startedAt) / 1000;
   return formatElapsedClock(elapsedSeconds);
 }
 
@@ -1060,6 +1080,8 @@ function clearRehearsalTickTimer() {
   state.rehearsal.nextAdvanceAt = 0;
   state.rehearsal.cardStartedAt = 0;
   state.rehearsal.introEndsAt = 0;
+  state.rehearsal.paused = false;
+  state.rehearsal.pausedAt = 0;
 }
 
 function syncRehearsalTickTimer(options = {}) {
@@ -1074,9 +1096,15 @@ function syncRehearsalTickTimer(options = {}) {
   const autoMode = getEffectiveRehearsalMode(timing) === "auto" && timing.autoAvailable;
   const hasNextCard = state.rehearsal.index < timing.bulletCount - 1;
   const introActive = isRehearsalIntroActive();
+  const timerNow = state.rehearsal.paused ? state.rehearsal.pausedAt : Date.now();
+
+  if (!autoMode && state.rehearsal.paused) {
+    state.rehearsal.paused = false;
+    state.rehearsal.pausedAt = 0;
+  }
 
   if (autoMode && !introActive && (reset || !state.rehearsal.cardStartedAt)) {
-    state.rehearsal.cardStartedAt = Date.now();
+    state.rehearsal.cardStartedAt = timerNow;
   } else if (!autoMode) {
     state.rehearsal.cardStartedAt = 0;
   }
@@ -1091,6 +1119,8 @@ function syncRehearsalTickTimer(options = {}) {
   if (!rehearsalTickTimer) {
     rehearsalTickTimer = window.setInterval(tickRehearsalTimer, REHEARSAL_TIMER_TICK_MS);
   }
+
+  syncRehearsalPauseButton(timing);
 }
 
 function updateRehearsalCardTimers(timing) {
@@ -1134,6 +1164,11 @@ function tickRehearsalTimer() {
     return;
   }
 
+  if (state.rehearsal.paused) {
+    updateRehearsalCardTimers(timing);
+    return;
+  }
+
   if (!state.rehearsal.startedAt) {
     state.rehearsal.startedAt = Date.now();
   }
@@ -1157,6 +1192,8 @@ function tickRehearsalTimer() {
 function setRehearsalMode(mode, options = {}) {
   const nextMode = mode === "auto" ? "auto" : "manual";
   state.rehearsal.mode = nextMode;
+  state.rehearsal.paused = false;
+  state.rehearsal.pausedAt = 0;
 
   if (elements.fullscreenRehearsal.hidden) {
     clearRehearsalTickTimer();
@@ -1172,6 +1209,32 @@ function setRehearsalMode(mode, options = {}) {
   }
 
   renderRehearsalScreen({ resetAutoTimer: options.resetTimer !== false });
+}
+
+function toggleRehearsalPause() {
+  const { version } = getRehearsalVersion();
+  const bullets = version?.rehearsalBullets || [];
+  const timing = getRehearsalTiming(version, bullets);
+
+  if (!isRehearsalPauseAvailable(timing)) return;
+
+  if (state.rehearsal.paused) {
+    const pausedMs = Math.max(0, Date.now() - state.rehearsal.pausedAt);
+
+    if (state.rehearsal.startedAt) state.rehearsal.startedAt += pausedMs;
+    if (state.rehearsal.cardStartedAt) state.rehearsal.cardStartedAt += pausedMs;
+    if (state.rehearsal.nextAdvanceAt) state.rehearsal.nextAdvanceAt += pausedMs;
+    if (state.rehearsal.introEndsAt) state.rehearsal.introEndsAt += pausedMs;
+
+    state.rehearsal.paused = false;
+    state.rehearsal.pausedAt = 0;
+  } else {
+    state.rehearsal.paused = true;
+    state.rehearsal.pausedAt = Date.now();
+  }
+
+  syncRehearsalPauseButton(timing);
+  updateRehearsalCardTimers(timing);
 }
 
 function defaultVersionLabel(status) {
@@ -5398,6 +5461,8 @@ function openRehearsal() {
   state.rehearsal.startedAt = useIntro ? 0 : Date.now();
   state.rehearsal.cardStartedAt = 0;
   state.rehearsal.introEndsAt = useIntro ? Date.now() + REHEARSAL_INTRO_DURATION_MS : 0;
+  state.rehearsal.paused = false;
+  state.rehearsal.pausedAt = 0;
   elements.fullscreenRehearsal.hidden = false;
   renderRehearsalScreen({ resetAutoTimer: true });
 }
@@ -5407,6 +5472,8 @@ function closeRehearsal() {
   state.rehearsal.startedAt = 0;
   state.rehearsal.cardStartedAt = 0;
   state.rehearsal.introEndsAt = 0;
+  state.rehearsal.paused = false;
+  state.rehearsal.pausedAt = 0;
   elements.fullscreenRehearsal.hidden = true;
 }
 
@@ -5450,6 +5517,7 @@ function renderRehearsalScreen(options = {}) {
   elements.fullscreenProgress.dataset.nearEnd = String(nearEnd);
   elements.prevBulletButton.disabled = introActive || index === 0;
   elements.nextBulletButton.disabled = introActive || index === bullets.length - 1;
+  syncRehearsalPauseButton(timing);
   scheduleFullscreenCueFit();
   syncRehearsalTickTimer({ timing, reset: resetAutoTimer });
   updateRehearsalCardTimers(timing);
@@ -5960,6 +6028,11 @@ elements.nextBulletButton.addEventListener("click", (event) => {
 elements.prevBulletButton.addEventListener("click", (event) => {
   event.stopPropagation();
   prevRehearsalBullet();
+});
+
+elements.pauseRehearsalButton.addEventListener("click", (event) => {
+  event.stopPropagation();
+  toggleRehearsalPause();
 });
 
 elements.exitFullscreenButton.addEventListener("click", (event) => {

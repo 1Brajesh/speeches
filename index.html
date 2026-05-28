@@ -2168,6 +2168,17 @@
       display: none;
     }
 
+    .pause-button {
+      width: 48px;
+      min-height: 44px;
+      padding: 0;
+      border-radius: 999px;
+      font-size: 1rem;
+      font-weight: 800;
+      line-height: 1;
+      text-align: center;
+    }
+
     .fullscreen-mode-toggle {
       justify-content: flex-end;
     }
@@ -2551,6 +2562,11 @@
         padding: 0 14px;
       }
 
+      .pause-button {
+        width: 44px;
+        min-height: 44px;
+      }
+
       .editor-grid {
         grid-template-columns: 1fr;
       }
@@ -2748,6 +2764,7 @@
         <div class="button-row">
           <button class="ghost-button" type="button" id="prevBulletButton">Previous</button>
           <button class="ghost-button" type="button" id="nextBulletButton">Next</button>
+          <button class="ghost-button pause-button" type="button" id="pauseRehearsalButton" aria-label="Pause rehearsal" aria-pressed="false" hidden>Ⅱ</button>
           <button class="primary-button" type="button" id="exitFullscreenButton">Exit</button>
         </div>
       </div>
@@ -2774,6 +2791,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260528k"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260528l"></script>
 </body>
 </html>
