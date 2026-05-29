@@ -3622,7 +3622,7 @@ function renderVersionsTab(speech) {
           <div class="button-row">
             <span class="meta-chip">${displayText(basedOnVersion ? `Based on ${basedOnVersion.label}` : "Original version")}</span>
             <span class="meta-chip">${displayText(editTimestampLabel)}</span>
-          <button class="version-button" type="button" data-action="new-version">New Version</button>
+          <button class="ghost-button" type="button" data-action="new-version">New Version</button>
           <button class="ghost-button" type="button" data-action="start-teleprompter">Teleprompter</button>
           <button class="script-button" type="button" data-action="edit-version">Edit Script</button>
           ${compareVersion
