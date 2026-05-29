@@ -2314,6 +2314,115 @@
       box-shadow: 0 12px 28px rgba(121, 84, 31, 0.24);
     }
 
+    .teleprompter {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      background:
+        radial-gradient(circle at 50% 10%, rgba(242, 200, 118, 0.08), transparent 28%),
+        linear-gradient(180deg, #05070a 0%, #090d12 100%);
+      color: #f7f5f1;
+    }
+
+    .teleprompter-bar,
+    .teleprompter-footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      padding: 18px 24px;
+    }
+
+    .teleprompter-status {
+      color: var(--muted);
+      font-size: 0.94rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .teleprompter-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+      align-items: center;
+    }
+
+    .teleprompter-controls .ghost-button,
+    .teleprompter-controls .primary-button {
+      min-height: 44px;
+      padding: 0 16px;
+    }
+
+    .teleprompter-body {
+      position: relative;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .teleprompter-scroll {
+      height: 100%;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: none;
+      scroll-behavior: auto;
+    }
+
+    .teleprompter-scroll::-webkit-scrollbar {
+      display: none;
+    }
+
+    .teleprompter-text {
+      width: min(920px, calc(100% - 48px));
+      margin: 0 auto;
+      padding: 42vh 0 52vh;
+      font-family: var(--serif);
+      color: #f7f5f1;
+    }
+
+    .teleprompter-text .script-paragraphs {
+      display: grid;
+      gap: 1.35em;
+    }
+
+    .teleprompter-text .body-copy {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2rem, 4.4vw, 4.2rem);
+      line-height: 1.22;
+      letter-spacing: 0;
+      color: #f7f5f1;
+    }
+
+    .teleprompter-guide {
+      position: absolute;
+      left: 50%;
+      top: 42%;
+      width: min(940px, calc(100% - 40px));
+      height: 2px;
+      transform: translateX(-50%);
+      border-radius: 999px;
+      background: linear-gradient(90deg, transparent, rgba(242, 200, 118, 0.6), transparent);
+      box-shadow: 0 0 22px rgba(242, 200, 118, 0.18);
+      pointer-events: none;
+    }
+
+    .teleprompter-progress-shell {
+      flex: 1 1 auto;
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+    }
+
+    .teleprompter-progress-fill {
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--gold), var(--green));
+    }
+
     .progress-shell {
       flex: 1 1 auto;
       max-width: 640px;
@@ -2420,6 +2529,40 @@
         width: 100%;
         justify-content: space-between;
       }
+
+      .teleprompter-bar,
+      .teleprompter-footer {
+        align-items: stretch;
+        flex-direction: column;
+        padding: 12px 14px;
+      }
+
+      .teleprompter-controls {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .teleprompter-controls .ghost-button,
+      .teleprompter-controls .primary-button {
+        min-height: 42px;
+        padding: 0 8px;
+      }
+
+      .teleprompter-text {
+        width: min(100% - 28px, 720px);
+        padding-top: 38vh;
+      }
+
+      .teleprompter-text .body-copy {
+        font-size: clamp(1.9rem, 8.4vw, 3.4rem);
+        line-height: 1.16;
+      }
+
+      .teleprompter-guide {
+        top: 40%;
+        width: calc(100% - 28px);
+      }
     }
 
     @media (max-width: 1180px) and (orientation: landscape) {
@@ -2495,6 +2638,21 @@
         max-height: 62vh;
         font-size: clamp(1.45rem, 3.35vw, 2.35rem);
         line-height: 1.15;
+      }
+
+      .teleprompter-bar,
+      .teleprompter-footer {
+        padding: 10px 18px;
+      }
+
+      .teleprompter-text {
+        width: min(1040px, calc(100% - 64px));
+        padding-top: 34vh;
+      }
+
+      .teleprompter-text .body-copy {
+        font-size: clamp(1.8rem, 4.6vw, 3.4rem);
+        line-height: 1.14;
       }
     }
 
@@ -2802,7 +2960,33 @@
     </div>
   </section>
 
+  <section class="teleprompter" id="teleprompterScreen" hidden>
+    <div class="teleprompter-bar">
+      <span class="teleprompter-status" id="teleprompterStatus">Ready</span>
+      <div class="teleprompter-controls">
+        <button class="ghost-button" type="button" id="slowerTeleprompterButton">Slower</button>
+        <button class="ghost-button" type="button" id="pauseTeleprompterButton" aria-pressed="false">Pause</button>
+        <button class="ghost-button" type="button" id="fasterTeleprompterButton">Faster</button>
+        <button class="ghost-button" type="button" id="resetTeleprompterButton">Reset</button>
+        <button class="primary-button" type="button" id="exitTeleprompterButton">Exit</button>
+      </div>
+    </div>
+
+    <div class="teleprompter-body">
+      <div class="teleprompter-guide" aria-hidden="true"></div>
+      <div class="teleprompter-scroll" id="teleprompterScroll">
+        <div class="teleprompter-text" id="teleprompterText"></div>
+      </div>
+    </div>
+
+    <div class="teleprompter-footer">
+      <div class="teleprompter-progress-shell">
+        <div class="teleprompter-progress-fill" id="teleprompterProgress"></div>
+      </div>
+    </div>
+  </section>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260528p"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260529a"></script>
 </body>
 </html>

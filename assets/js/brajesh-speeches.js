@@ -21,6 +21,11 @@ const SCRIPT_PARAGRAPH_SPACING_DEFAULT = 1.2;
 const REHEARSAL_MIN_CARD_SECONDS = 1;
 const REHEARSAL_TIMER_TICK_MS = 250;
 const REHEARSAL_INTRO_DURATION_MS = 1600;
+const TELEPROMPTER_DEFAULT_WPM = 130;
+const TELEPROMPTER_MIN_DURATION_MS = 30000;
+const TELEPROMPTER_SPEED_MIN = 0.5;
+const TELEPROMPTER_SPEED_MAX = 2;
+const TELEPROMPTER_SPEED_STEP = 0.1;
 
 const state = {
   user: null,
@@ -56,6 +61,13 @@ const state = {
     introEndsAt: 0,
     paused: false,
     pausedAt: 0,
+  },
+  teleprompter: {
+    speechId: null,
+    versionId: null,
+    running: false,
+    speed: 1,
+    lastFrameAt: 0,
   },
   preferences: createDefaultPreferences(),
   settings: {
@@ -100,6 +112,7 @@ let settingsSaveBusy = false;
 let settingsSaveQueued = false;
 let backupBusy = false;
 let rehearsalFitFrame = 0;
+let teleprompterFrame = 0;
 
 const elements = {
   pageStatus: document.querySelector("#pageStatus"),
@@ -163,6 +176,16 @@ const elements = {
   prevBulletButton: document.querySelector("#prevBulletButton"),
   nextBulletButton: document.querySelector("#nextBulletButton"),
   exitFullscreenButton: document.querySelector("#exitFullscreenButton"),
+  teleprompterScreen: document.querySelector("#teleprompterScreen"),
+  teleprompterScroll: document.querySelector("#teleprompterScroll"),
+  teleprompterText: document.querySelector("#teleprompterText"),
+  teleprompterStatus: document.querySelector("#teleprompterStatus"),
+  teleprompterProgress: document.querySelector("#teleprompterProgress"),
+  pauseTeleprompterButton: document.querySelector("#pauseTeleprompterButton"),
+  slowerTeleprompterButton: document.querySelector("#slowerTeleprompterButton"),
+  fasterTeleprompterButton: document.querySelector("#fasterTeleprompterButton"),
+  resetTeleprompterButton: document.querySelector("#resetTeleprompterButton"),
+  exitTeleprompterButton: document.querySelector("#exitTeleprompterButton"),
 };
 
 function setStatusElement(element, text, tone = "") {
@@ -289,6 +312,11 @@ function resetSpeechState() {
   state.rehearsal.introEndsAt = 0;
   state.rehearsal.paused = false;
   state.rehearsal.pausedAt = 0;
+  state.teleprompter.speechId = null;
+  state.teleprompter.versionId = null;
+  state.teleprompter.running = false;
+  state.teleprompter.speed = 1;
+  state.teleprompter.lastFrameAt = 0;
   state.preferences = createDefaultPreferences();
   state.settings.loaded = false;
   state.settings.saving = false;
@@ -300,6 +328,7 @@ function resetSpeechState() {
   applyScriptParagraphSpacingPreference();
   closeEditor();
   closeRehearsal();
+  closeTeleprompter();
 }
 
 function cleanText(value) {
@@ -3314,6 +3343,7 @@ function renderDetailActions(speech) {
   elements.detailActionRow.innerHTML = `
     <button class="meta-button" type="button" data-action="edit-speech">Edit Meta</button>
     <button class="script-button" type="button" data-action="edit-version">Edit Script</button>
+    <button class="ghost-button" type="button" data-action="start-teleprompter">Teleprompter</button>
     <button class="primary-button" type="button" data-action="new-delivery">Log Run</button>
     <button class="danger-button" type="button" data-action="delete-speech">Delete Speech</button>
   `;
@@ -3517,6 +3547,7 @@ function renderOverviewTab(speech) {
         <h4>Speech Body</h4>
         <div class="button-row">
           <span class="meta-chip">${version?.label || "No version"}</span>
+          <button class="ghost-button" type="button" data-action="start-teleprompter">Teleprompter</button>
           <button class="script-button" type="button" data-action="edit-version">Edit Script</button>
         </div>
       </div>
@@ -3590,6 +3621,7 @@ function renderVersionsTab(speech) {
             <span class="meta-chip">${displayText(basedOnVersion ? `Based on ${basedOnVersion.label}` : "Original version")}</span>
             <span class="meta-chip">${displayText(editTimestampLabel)}</span>
           <button class="ghost-button" type="button" data-action="new-version">New Version</button>
+          <button class="ghost-button" type="button" data-action="start-teleprompter">Teleprompter</button>
           <button class="script-button" type="button" data-action="edit-version">Edit Script</button>
           ${compareVersion
               ? `<button class="ghost-button" type="button" data-action="toggle-version-compare" aria-pressed="${String(compareOpen)}">${compareOpen ? "Hide Compare" : "Compare"}</button>`
@@ -5495,6 +5527,7 @@ function openRehearsal() {
   const timing = getRehearsalTiming(version, version.rehearsalBullets || []);
   const useIntro = getEffectiveRehearsalMode(timing) === "auto" && timing.autoAvailable;
 
+  closeTeleprompter();
   state.rehearsal.speechId = speech.id;
   state.rehearsal.versionId = version.id;
   state.rehearsal.index = 0;
@@ -5515,6 +5548,155 @@ function closeRehearsal() {
   state.rehearsal.paused = false;
   state.rehearsal.pausedAt = 0;
   elements.fullscreenRehearsal.hidden = true;
+}
+
+function getTeleprompterVersion() {
+  const speech = getSpeechById(state.teleprompter.speechId);
+  const version = getVersionById(speech, state.teleprompter.versionId);
+  return { speech, version };
+}
+
+function getTeleprompterDurationMs(version) {
+  const targetMinutes = Math.max(0, Number.parseInt(version?.estimatedMinutes || 0, 10) || 0);
+  if (targetMinutes > 0) {
+    return Math.max(TELEPROMPTER_MIN_DURATION_MS, targetMinutes * 60 * 1000);
+  }
+
+  const wordCount = Math.max(1, versionWordCount(version));
+  return Math.max(TELEPROMPTER_MIN_DURATION_MS, (wordCount / TELEPROMPTER_DEFAULT_WPM) * 60 * 1000);
+}
+
+function getTeleprompterScrollRange() {
+  const scroller = elements.teleprompterScroll;
+  if (!scroller) return 0;
+  return Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+}
+
+function getTeleprompterProgress() {
+  const range = getTeleprompterScrollRange();
+  if (!range) return 0;
+  return Math.max(0, Math.min(1, elements.teleprompterScroll.scrollTop / range));
+}
+
+function syncTeleprompterControls() {
+  const { version } = getTeleprompterVersion();
+  const durationMs = getTeleprompterDurationMs(version);
+  const progress = getTeleprompterProgress();
+  const targetLabel = version?.estimatedMinutes
+    ? `${formatMinuteLabel(version.estimatedMinutes)} target`
+    : `${formatDurationLabel(durationMs / 1000)} estimated`;
+
+  elements.pauseTeleprompterButton.textContent = state.teleprompter.running ? "Pause" : "Resume";
+  elements.pauseTeleprompterButton.setAttribute("aria-pressed", String(!state.teleprompter.running));
+  elements.teleprompterStatus.textContent = [
+    targetLabel,
+    `${Math.round(state.teleprompter.speed * 100)}% speed`,
+    `${Math.round(progress * 100)}% read`,
+  ].join(" · ");
+  elements.teleprompterProgress.style.width = `${progress * 100}%`;
+  elements.slowerTeleprompterButton.disabled = state.teleprompter.speed <= TELEPROMPTER_SPEED_MIN;
+  elements.fasterTeleprompterButton.disabled = state.teleprompter.speed >= TELEPROMPTER_SPEED_MAX;
+}
+
+function scheduleTeleprompterTick() {
+  window.cancelAnimationFrame(teleprompterFrame);
+  teleprompterFrame = window.requestAnimationFrame(tickTeleprompter);
+}
+
+function tickTeleprompter(timestamp) {
+  if (elements.teleprompterScreen.hidden) {
+    window.cancelAnimationFrame(teleprompterFrame);
+    teleprompterFrame = 0;
+    return;
+  }
+
+  const { version } = getTeleprompterVersion();
+  const scroller = elements.teleprompterScroll;
+  const range = getTeleprompterScrollRange();
+
+  if (state.teleprompter.running && version && scroller && range > 0) {
+    if (!state.teleprompter.lastFrameAt) {
+      state.teleprompter.lastFrameAt = timestamp;
+    }
+
+    const elapsedMs = Math.max(0, timestamp - state.teleprompter.lastFrameAt);
+    const durationMs = getTeleprompterDurationMs(version);
+    const pixelsPerMs = range / durationMs;
+    scroller.scrollTop = Math.min(range, scroller.scrollTop + (pixelsPerMs * elapsedMs * state.teleprompter.speed));
+    state.teleprompter.lastFrameAt = timestamp;
+
+    if (scroller.scrollTop >= range - 1) {
+      state.teleprompter.running = false;
+      state.teleprompter.lastFrameAt = 0;
+    }
+  } else {
+    state.teleprompter.lastFrameAt = 0;
+  }
+
+  syncTeleprompterControls();
+  scheduleTeleprompterTick();
+}
+
+function openTeleprompter() {
+  const speech = ensureSelection();
+  const version = getSelectedVersionForSpeech(speech);
+
+  if (!speech || !version?.speechBody?.trim()) {
+    setPageStatus("Add speech body text before starting teleprompter.", "error");
+    return;
+  }
+
+  closeRehearsal();
+  state.teleprompter.speechId = speech.id;
+  state.teleprompter.versionId = version.id;
+  state.teleprompter.running = true;
+  state.teleprompter.lastFrameAt = 0;
+  elements.teleprompterText.innerHTML = renderScriptBodyText(version.speechBody, "No speech body yet.");
+  elements.teleprompterScreen.hidden = false;
+  elements.teleprompterScroll.scrollTop = 0;
+  syncTeleprompterControls();
+  scheduleTeleprompterTick();
+}
+
+function closeTeleprompter() {
+  window.cancelAnimationFrame(teleprompterFrame);
+  teleprompterFrame = 0;
+  state.teleprompter.running = false;
+  state.teleprompter.lastFrameAt = 0;
+  if (elements.teleprompterScreen) {
+    elements.teleprompterScreen.hidden = true;
+  }
+}
+
+function toggleTeleprompterPause() {
+  if (elements.teleprompterScreen.hidden) return;
+
+  state.teleprompter.running = !state.teleprompter.running;
+  state.teleprompter.lastFrameAt = 0;
+  syncTeleprompterControls();
+  scheduleTeleprompterTick();
+}
+
+function adjustTeleprompterSpeed(direction) {
+  const delta = direction > 0 ? TELEPROMPTER_SPEED_STEP : -TELEPROMPTER_SPEED_STEP;
+  const nextSpeed = Math.max(
+    TELEPROMPTER_SPEED_MIN,
+    Math.min(TELEPROMPTER_SPEED_MAX, Math.round((state.teleprompter.speed + delta) * 10) / 10),
+  );
+
+  state.teleprompter.speed = nextSpeed;
+  state.teleprompter.lastFrameAt = 0;
+  syncTeleprompterControls();
+}
+
+function resetTeleprompter() {
+  if (elements.teleprompterScreen.hidden) return;
+
+  elements.teleprompterScroll.scrollTop = 0;
+  state.teleprompter.running = true;
+  state.teleprompter.lastFrameAt = 0;
+  syncTeleprompterControls();
+  scheduleTeleprompterTick();
 }
 
 function getRehearsalVersion() {
@@ -5594,6 +5776,7 @@ async function runAction(action) {
     "new-delivery",
     "edit-delivery",
     "start-rehearsal",
+    "start-teleprompter",
   ].includes(action);
 
   if (needsSpeechDetail) {
@@ -5761,6 +5944,11 @@ async function runAction(action) {
 
   if (action === "start-rehearsal") {
     openRehearsal();
+    return;
+  }
+
+  if (action === "start-teleprompter") {
+    openTeleprompter();
     return;
   }
 
@@ -6080,7 +6268,64 @@ elements.exitFullscreenButton.addEventListener("click", (event) => {
   closeRehearsal();
 });
 
+elements.pauseTeleprompterButton.addEventListener("click", () => {
+  toggleTeleprompterPause();
+});
+
+elements.slowerTeleprompterButton.addEventListener("click", () => {
+  adjustTeleprompterSpeed(-1);
+});
+
+elements.fasterTeleprompterButton.addEventListener("click", () => {
+  adjustTeleprompterSpeed(1);
+});
+
+elements.resetTeleprompterButton.addEventListener("click", () => {
+  resetTeleprompter();
+});
+
+elements.exitTeleprompterButton.addEventListener("click", () => {
+  closeTeleprompter();
+});
+
+elements.teleprompterScroll.addEventListener("scroll", () => {
+  if (elements.teleprompterScreen.hidden) return;
+  syncTeleprompterControls();
+});
+
 document.addEventListener("keydown", (event) => {
+  if (!elements.teleprompterScreen.hidden) {
+    if (event.key === "Escape") {
+      closeTeleprompter();
+      return;
+    }
+
+    if (event.key === " ") {
+      event.preventDefault();
+      toggleTeleprompterPause();
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      adjustTeleprompterSpeed(1);
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      adjustTeleprompterSpeed(-1);
+      return;
+    }
+
+    if (event.key === "Home") {
+      event.preventDefault();
+      resetTeleprompter();
+    }
+
+    return;
+  }
+
   if (!elements.fullscreenRehearsal.hidden) {
     if (event.key === "Escape") {
       closeRehearsal();
