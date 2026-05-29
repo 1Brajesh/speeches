@@ -2351,8 +2351,13 @@
 
     .teleprompter-controls .ghost-button,
     .teleprompter-controls .primary-button {
+      width: 54px;
       min-height: 44px;
-      padding: 0 16px;
+      padding: 0;
+      font-size: 1.05rem;
+      font-weight: 800;
+      line-height: 1;
+      text-align: center;
     }
 
     .teleprompter-body {
@@ -2545,8 +2550,8 @@
 
       .teleprompter-controls .ghost-button,
       .teleprompter-controls .primary-button {
+        width: 100%;
         min-height: 42px;
-        padding: 0 8px;
       }
 
       .teleprompter-text {
@@ -2964,11 +2969,11 @@
     <div class="teleprompter-bar">
       <span class="teleprompter-status" id="teleprompterStatus">Ready</span>
       <div class="teleprompter-controls">
-        <button class="ghost-button" type="button" id="slowerTeleprompterButton">Slower</button>
-        <button class="ghost-button" type="button" id="pauseTeleprompterButton" aria-pressed="false">Pause</button>
-        <button class="ghost-button" type="button" id="fasterTeleprompterButton">Faster</button>
-        <button class="ghost-button" type="button" id="resetTeleprompterButton">Reset</button>
-        <button class="primary-button" type="button" id="exitTeleprompterButton">Exit</button>
+        <button class="ghost-button" type="button" id="slowerTeleprompterButton" aria-label="Slower">⏪</button>
+        <button class="ghost-button" type="button" id="pauseTeleprompterButton" aria-label="Pause teleprompter" aria-pressed="false">Ⅱ</button>
+        <button class="ghost-button" type="button" id="fasterTeleprompterButton" aria-label="Faster">⏩</button>
+        <button class="ghost-button" type="button" id="resetTeleprompterButton" aria-label="Reset">↺</button>
+        <button class="primary-button" type="button" id="exitTeleprompterButton" aria-label="Exit">×</button>
       </div>
     </div>
 
@@ -2987,6 +2992,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260529a"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260529b"></script>
 </body>
 </html>

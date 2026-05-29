@@ -67,6 +67,7 @@ const state = {
     versionId: null,
     running: false,
     speed: 1,
+    scrollTop: 0,
     lastFrameAt: 0,
   },
   preferences: createDefaultPreferences(),
@@ -316,6 +317,7 @@ function resetSpeechState() {
   state.teleprompter.versionId = null;
   state.teleprompter.running = false;
   state.teleprompter.speed = 1;
+  state.teleprompter.scrollTop = 0;
   state.teleprompter.lastFrameAt = 0;
   state.preferences = createDefaultPreferences();
   state.settings.loaded = false;
@@ -5586,8 +5588,9 @@ function syncTeleprompterControls() {
     ? `${formatMinuteLabel(version.estimatedMinutes)} target`
     : `${formatDurationLabel(durationMs / 1000)} estimated`;
 
-  elements.pauseTeleprompterButton.textContent = state.teleprompter.running ? "Pause" : "Resume";
+  elements.pauseTeleprompterButton.textContent = state.teleprompter.running ? "Ⅱ" : "▶";
   elements.pauseTeleprompterButton.setAttribute("aria-pressed", String(!state.teleprompter.running));
+  elements.pauseTeleprompterButton.setAttribute("aria-label", state.teleprompter.running ? "Pause teleprompter" : "Resume teleprompter");
   elements.teleprompterStatus.textContent = [
     targetLabel,
     `${Math.round(state.teleprompter.speed * 100)}% speed`,
@@ -5622,10 +5625,14 @@ function tickTeleprompter(timestamp) {
     const elapsedMs = Math.max(0, timestamp - state.teleprompter.lastFrameAt);
     const durationMs = getTeleprompterDurationMs(version);
     const pixelsPerMs = range / durationMs;
-    scroller.scrollTop = Math.min(range, scroller.scrollTop + (pixelsPerMs * elapsedMs * state.teleprompter.speed));
+    state.teleprompter.scrollTop = Math.min(
+      range,
+      state.teleprompter.scrollTop + (pixelsPerMs * elapsedMs * state.teleprompter.speed),
+    );
+    scroller.scrollTop = state.teleprompter.scrollTop;
     state.teleprompter.lastFrameAt = timestamp;
 
-    if (scroller.scrollTop >= range - 1) {
+    if (state.teleprompter.scrollTop >= range - 1) {
       state.teleprompter.running = false;
       state.teleprompter.lastFrameAt = 0;
     }
@@ -5650,6 +5657,7 @@ function openTeleprompter() {
   state.teleprompter.speechId = speech.id;
   state.teleprompter.versionId = version.id;
   state.teleprompter.running = true;
+  state.teleprompter.scrollTop = 0;
   state.teleprompter.lastFrameAt = 0;
   elements.teleprompterText.innerHTML = renderScriptBodyText(version.speechBody, "No speech body yet.");
   elements.teleprompterScreen.hidden = false;
@@ -5662,6 +5670,7 @@ function closeTeleprompter() {
   window.cancelAnimationFrame(teleprompterFrame);
   teleprompterFrame = 0;
   state.teleprompter.running = false;
+  state.teleprompter.scrollTop = 0;
   state.teleprompter.lastFrameAt = 0;
   if (elements.teleprompterScreen) {
     elements.teleprompterScreen.hidden = true;
@@ -5694,6 +5703,7 @@ function resetTeleprompter() {
 
   elements.teleprompterScroll.scrollTop = 0;
   state.teleprompter.running = true;
+  state.teleprompter.scrollTop = 0;
   state.teleprompter.lastFrameAt = 0;
   syncTeleprompterControls();
   scheduleTeleprompterTick();
@@ -6290,6 +6300,7 @@ elements.exitTeleprompterButton.addEventListener("click", () => {
 
 elements.teleprompterScroll.addEventListener("scroll", () => {
   if (elements.teleprompterScreen.hidden) return;
+  state.teleprompter.scrollTop = elements.teleprompterScroll.scrollTop;
   syncTeleprompterControls();
 });
 
