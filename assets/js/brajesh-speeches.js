@@ -66,6 +66,7 @@ const state = {
   versionCompareOpen: false,
   versionFocusOpen: false,
   versionFocusIds: [],
+  versionFocusSavedLinesOpen: false,
   tab: "overview",
   rehearsal: {
     speechId: null,
@@ -3911,7 +3912,7 @@ function renderVersionFocusCompare(speech, selectedVersion) {
 
   return `
     <div class="reader-stack">
-      <div class="version-focus-workspace">
+      <div class="version-focus-workspace" data-saved-lines-open="${String(state.versionFocusSavedLinesOpen)}">
         <div class="version-focus-main">
           <div class="card version-focus-card">
             <div class="panel-head">
@@ -3936,9 +3937,7 @@ function renderVersionFocusCompare(speech, selectedVersion) {
           </div>
         </div>
 
-        <aside class="version-focus-saved-drawer">
-          ${renderSavedLinesTray(speech, { drawer: true })}
-        </aside>
+        ${renderFocusSavedLinesDrawerShell(speech)}
       </div>
     </div>
   `;
@@ -3958,20 +3957,28 @@ function renderSavedLineSourceChip(savedLine) {
 function renderSavedLineItem(speech, savedLine, options = {}) {
   const compact = Boolean(options.compact);
   return `
-    <div class="saved-line-item" data-used="${String(savedLine.used)}">
-      <p class="saved-line-text">${displayText(savedLine.text)}</p>
-      <div class="saved-line-meta">
-        ${renderSavedLineSourceChip(savedLine)}
-        <span class="meta-chip">${displayText(getSavedLineVersionLabel(speech, savedLine))}</span>
-        <span class="meta-chip">${savedLine.used ? "Used" : "Unused"}</span>
-        ${compact ? "" : `<span class="meta-chip">${displayText(formatDateTime(savedLine.createdAt))}</span>`}
+    <details class="saved-line-item" data-used="${String(savedLine.used)}">
+      <summary class="saved-line-summary">
+        <p class="saved-line-text">${displayText(savedLine.text)}</p>
+        <span class="saved-line-summary-meta">
+          ${renderSavedLineSourceChip(savedLine)}
+          ${savedLine.used ? `<span class="meta-chip">Used</span>` : ""}
+        </span>
+      </summary>
+      <div class="saved-line-details">
+        <div class="saved-line-meta">
+          ${renderSavedLineSourceChip(savedLine)}
+          <span class="meta-chip">${displayText(getSavedLineVersionLabel(speech, savedLine))}</span>
+          <span class="meta-chip">${savedLine.used ? "Used" : "Unused"}</span>
+          ${compact ? "" : `<span class="meta-chip">${displayText(formatDateTime(savedLine.createdAt))}</span>`}
+        </div>
+        <div class="saved-line-actions">
+          <button class="ghost-button" type="button" data-saved-line-action="copy" data-saved-line-id="${savedLine.id}">Copy</button>
+          ${compact ? "" : `<button class="ghost-button" type="button" data-saved-line-action="toggle-used" data-saved-line-id="${savedLine.id}">${savedLine.used ? "Mark Unused" : "Mark Used"}</button>`}
+          ${compact ? "" : `<button class="danger-button" type="button" data-saved-line-action="delete" data-saved-line-id="${savedLine.id}">Delete</button>`}
+        </div>
       </div>
-      <div class="saved-line-actions">
-        <button class="ghost-button" type="button" data-saved-line-action="copy" data-saved-line-id="${savedLine.id}">Copy</button>
-        ${compact ? "" : `<button class="ghost-button" type="button" data-saved-line-action="toggle-used" data-saved-line-id="${savedLine.id}">${savedLine.used ? "Mark Unused" : "Mark Used"}</button>`}
-        ${compact ? "" : `<button class="danger-button" type="button" data-saved-line-action="delete" data-saved-line-id="${savedLine.id}">Delete</button>`}
-      </div>
-    </div>
+    </details>
   `;
 }
 
@@ -3991,6 +3998,7 @@ function renderSavedLinesTray(speech, options = {}) {
         <div class="button-row">
           <span class="meta-chip">${savedLines.length} saved</span>
           <span class="meta-chip">${unusedCount} unused</span>
+          ${drawer ? `<button class="ghost-button" type="button" data-action="toggle-saved-lines-drawer" aria-label="Hide saved lines">×</button>` : ""}
           ${compact || drawer ? "" : `<button class="primary-button" type="button" data-action="save-selected-line">Save Line</button>`}
         </div>
       </div>
@@ -4005,11 +4013,39 @@ function renderSavedLinesTray(speech, options = {}) {
   `;
 }
 
+function renderFocusSavedLinesDrawerShell(speech) {
+  const savedLines = speech.savedLines || [];
+  const isOpen = state.versionFocusSavedLinesOpen;
+
+  return `
+    <aside class="version-focus-saved-drawer" data-open="${String(isOpen)}">
+      ${isOpen ? renderSavedLinesTray(speech, { drawer: true }) : `
+        <button class="saved-lines-drawer-tab" type="button" data-action="toggle-saved-lines-drawer" aria-label="Show saved lines">
+          <span>Saved Lines</span>
+          <strong>${savedLines.length}</strong>
+        </button>
+      `}
+    </aside>
+  `;
+}
+
 function renderFocusSavedLinesDrawer(speech) {
   const drawer = elements.tabContent.querySelector(".version-focus-saved-drawer");
   if (!drawer) return false;
 
-  drawer.innerHTML = renderSavedLinesTray(speech, { drawer: true });
+  const workspace = drawer.closest(".version-focus-workspace");
+  if (workspace) {
+    workspace.dataset.savedLinesOpen = String(state.versionFocusSavedLinesOpen);
+  }
+  drawer.dataset.open = String(state.versionFocusSavedLinesOpen);
+  drawer.innerHTML = state.versionFocusSavedLinesOpen
+    ? renderSavedLinesTray(speech, { drawer: true })
+    : `
+      <button class="saved-lines-drawer-tab" type="button" data-action="toggle-saved-lines-drawer" aria-label="Show saved lines">
+        <span>Saved Lines</span>
+        <strong>${(speech.savedLines || []).length}</strong>
+      </button>
+    `;
   return true;
 }
 
@@ -6074,6 +6110,7 @@ async function saveSelectedLine() {
     if (error) throw error;
 
     if (isFocusCompareActive() && data) {
+      state.versionFocusSavedLinesOpen = true;
       speech.savedLines = buildSpeechSavedLines([
         data,
         ...(speech.savedLines || []).map((line) => ({
@@ -6637,13 +6674,23 @@ async function runAction(action) {
     state.versionFocusOpen = true;
     state.versionCompareOpen = false;
     state.versionFocusIds = getDefaultFocusVersionIds(speech, selectedVersion);
+    state.versionFocusSavedLinesOpen = false;
     renderApp();
     return;
   }
 
   if (action === "close-version-focus" && speech) {
     state.versionFocusOpen = false;
+    state.versionFocusSavedLinesOpen = false;
     renderApp();
+    return;
+  }
+
+  if (action === "toggle-saved-lines-drawer" && speech) {
+    state.versionFocusSavedLinesOpen = !state.versionFocusSavedLinesOpen;
+    if (!renderFocusSavedLinesDrawer(speech)) {
+      renderApp();
+    }
     return;
   }
 
