@@ -138,6 +138,7 @@ let backupBusy = false;
 let rehearsalFitFrame = 0;
 let teleprompterFrame = 0;
 let selectionBubbleFrame = 0;
+let focusSavedLinesFitFrame = 0;
 
 const elements = {
   pageStatus: document.querySelector("#pageStatus"),
@@ -4046,7 +4047,41 @@ function renderFocusSavedLinesDrawer(speech) {
         <strong>${(speech.savedLines || []).length}</strong>
       </button>
     `;
+  scheduleFocusSavedLinesFit();
   return true;
+}
+
+function fitFocusSavedLinesDrawer() {
+  focusSavedLinesFitFrame = 0;
+
+  const drawer = elements.tabContent.querySelector(".version-focus-saved-drawer");
+  const card = drawer?.querySelector(".saved-lines-card[data-drawer='true']");
+
+  if (!isFocusCompareActive() || !drawer || !card || drawer.dataset.open !== "true") {
+    if (drawer) drawer.style.removeProperty("min-height");
+    if (card) card.style.removeProperty("min-height");
+    return;
+  }
+
+  card.style.removeProperty("min-height");
+  drawer.style.removeProperty("min-height");
+
+  const comparisonColumns = Array.from(elements.tabContent.querySelectorAll(".version-focus-column"));
+  const tallestColumnHeight = comparisonColumns.reduce((maxHeight, column) => {
+    const height = Math.ceil(column.getBoundingClientRect().height);
+    return Math.max(maxHeight, height);
+  }, 0);
+
+  if (tallestColumnHeight <= 0) return;
+
+  const targetHeight = `${tallestColumnHeight}px`;
+  drawer.style.minHeight = targetHeight;
+  card.style.minHeight = targetHeight;
+}
+
+function scheduleFocusSavedLinesFit() {
+  if (focusSavedLinesFitFrame) return;
+  focusSavedLinesFitFrame = window.requestAnimationFrame(fitFocusSavedLinesDrawer);
 }
 
 function renderRunsTab(speech) {
@@ -6957,6 +6992,7 @@ function renderApp() {
   syncAllScriptPreferenceControls(elements.tabContent);
   syncSettingsStatus(elements.tabContent);
   scheduleSelectionBubbleSync();
+  scheduleFocusSavedLinesFit();
 }
 
 elements.loginForm.addEventListener("submit", async (event) => {
@@ -7179,6 +7215,8 @@ if (elements.selectionBubble) {
 document.addEventListener("selectionchange", scheduleSelectionBubbleSync);
 window.addEventListener("scroll", scheduleSelectionBubbleSync, true);
 window.addEventListener("resize", scheduleSelectionBubbleSync);
+window.addEventListener("resize", scheduleFocusSavedLinesFit);
+window.visualViewport?.addEventListener("resize", scheduleFocusSavedLinesFit);
 
 elements.editorShell.addEventListener("click", (event) => {
   const savedLineButton = event.target.closest("[data-saved-line-action]");
