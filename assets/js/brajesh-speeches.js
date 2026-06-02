@@ -64,6 +64,8 @@ const state = {
   selectedDeliveryId: null,
   selectedPlaybookId: null,
   versionCompareOpen: false,
+  versionFocusOpen: false,
+  versionFocusIds: [],
   tab: "overview",
   rehearsal: {
     speechId: null,
@@ -322,6 +324,8 @@ function resetSpeechState() {
   state.selectedDeliveryId = null;
   state.selectedPlaybookId = null;
   state.versionCompareOpen = false;
+  state.versionFocusOpen = false;
+  state.versionFocusIds = [];
   state.rehearsal.speechId = null;
   state.rehearsal.versionId = null;
   state.rehearsal.index = 0;
@@ -2292,6 +2296,38 @@ function getSelectedVersionForSpeech(speech) {
   return speech.versions[0] || null;
 }
 
+function uniqueVersionIds(ids) {
+  return [...new Set((ids || []).filter(Boolean))];
+}
+
+function getDefaultFocusVersionIds(speech, selectedVersion) {
+  if (!speech?.versions?.length) return [];
+
+  const compareReference = getCompareReferenceVersion(speech, selectedVersion);
+  const orderedByUpdated = [...speech.versions]
+    .sort((a, b) => timestampMs(b.updatedAt || b.createdAt) - timestampMs(a.updatedAt || a.createdAt));
+
+  return uniqueVersionIds([
+    compareReference.version?.id,
+    selectedVersion?.id,
+    ...orderedByUpdated.map((version) => version.id),
+  ]).slice(0, Math.min(3, speech.versions.length));
+}
+
+function getFocusCompareVersions(speech, selectedVersion) {
+  const validIds = new Set((speech?.versions || []).map((version) => version.id));
+  let focusIds = uniqueVersionIds(state.versionFocusIds).filter((id) => validIds.has(id));
+
+  if (focusIds.length < Math.min(2, speech?.versions?.length || 0)) {
+    focusIds = getDefaultFocusVersionIds(speech, selectedVersion);
+  }
+
+  state.versionFocusIds = focusIds.slice(0, 3);
+  return state.versionFocusIds
+    .map((id) => getVersionById(speech, id))
+    .filter(Boolean);
+}
+
 function scrollTabAnchorIntoView(anchorName) {
   if (!anchorName) return;
 
@@ -3631,6 +3667,10 @@ function renderOverviewTab(speech) {
 
 function renderVersionsTab(speech) {
   const selectedVersion = getSelectedVersionForSpeech(speech);
+  if (state.versionFocusOpen) {
+    return renderVersionFocusCompare(speech, selectedVersion);
+  }
+
   const basedOnVersion = selectedVersion?.basedOn ? getVersionById(speech, selectedVersion.basedOn) : null;
   const compareReference = getCompareReferenceVersion(speech, selectedVersion);
   const compareVersion = compareReference.version;
@@ -3693,13 +3733,16 @@ function renderVersionsTab(speech) {
           <button class="ghost-button" type="button" data-action="start-teleprompter">Teleprompter</button>
           <button class="ghost-button" type="button" data-action="save-selected-line">Save Line</button>
           <button class="script-button" type="button" data-action="edit-version">Edit Script</button>
+          ${speech.versions.length > 1
+              ? `<button class="ghost-button" type="button" data-action="open-version-focus">Focus Compare</button>`
+              : ""}
           ${compareVersion
               ? `<button class="ghost-button" type="button" data-action="toggle-version-compare" aria-pressed="${String(compareOpen)}">${compareOpen ? "Hide Compare" : "Compare"}</button>`
               : `<span class="meta-chip">${displayText(compareReference.label)}</span>`}
             ${canDeleteVersion ? '<button class="danger-button" type="button" data-action="delete-version">Delete Version</button>' : '<span class="meta-chip">Keep at least 1 version</span>'}
           </div>
         </div>
-        <div class="script-box version-script-box" style="margin-bottom: 14px;">
+        <div class="script-box version-script-box" data-save-line-version-id="${selectedVersion?.id || ""}" style="margin-bottom: 14px;">
           ${renderScriptBodyText(selectedVersion?.speechBody, "No speech body yet.")}
         </div>
         <div class="notes-box">
@@ -3751,7 +3794,7 @@ function renderVersionsTab(speech) {
                 </div>
                 <p class="body-copy">${displayText(compareVersion?.revisionNote, "No revision note.")}</p>
               </div>
-              <div class="script-box compare-script-box scroll-area">
+              <div class="script-box compare-script-box scroll-area" data-save-line-version-id="${compareVersion?.id || ""}">
                 ${renderCompareBlocks(compareData?.previousBlocks || [], "No speech body yet.")}
               </div>
             </div>
@@ -3775,13 +3818,92 @@ function renderVersionsTab(speech) {
                 </div>
                 <p class="body-copy">${displayText(selectedVersion?.revisionNote, "No revision note.")}</p>
               </div>
-              <div class="script-box compare-script-box scroll-area">
+              <div class="script-box compare-script-box scroll-area" data-save-line-version-id="${selectedVersion?.id || ""}">
                 ${renderCompareBlocks(compareData?.selectedBlocks || [], "No speech body yet.")}
               </div>
             </div>
           </div>
         </div>
       ` : ""}
+    </div>
+  `;
+}
+
+function renderVersionFocusPicker(speech, focusVersions) {
+  const focusIds = new Set(focusVersions.map((version) => version.id));
+  return `
+    <div class="version-focus-picker" aria-label="Choose versions to compare">
+      ${speech.versions.map((version) => {
+        const selected = focusIds.has(version.id);
+        const disabled = !selected && focusVersions.length >= 3;
+        return `
+          <button
+            class="version-focus-pill"
+            type="button"
+            data-focus-version-id="${version.id}"
+            aria-pressed="${String(selected)}"
+            ${disabled ? "disabled" : ""}
+          >
+            <span>${displayText(version.label)}</span>
+            <small>${versionWordCount(version)} words · ${version.estimatedMinutes || "-"} min</small>
+          </button>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderVersionFocusColumn(version) {
+  return `
+    <article class="version-focus-column" data-save-line-version-id="${version.id}">
+      <div class="version-focus-column-head">
+        <div>
+          <h4>${displayText(version.label)}</h4>
+          <p class="helper-copy">${displayText(`Last edited ${formatDateTime(version.updatedAt)}`)}</p>
+        </div>
+        <div class="saved-line-meta">
+          ${renderVersionMetadataChips(version)}
+          <span class="meta-chip">${versionWordCount(version)} words</span>
+          <span class="meta-chip">${version.estimatedMinutes || "-"} min</span>
+          <span class="meta-chip">${version.rehearsalBullets.length} bullets</span>
+        </div>
+      </div>
+      <div class="script-box version-focus-script">
+        ${renderScriptBodyText(version.speechBody, "No speech body yet.")}
+      </div>
+    </article>
+  `;
+}
+
+function renderVersionFocusCompare(speech, selectedVersion) {
+  const focusVersions = getFocusCompareVersions(speech, selectedVersion);
+  const canCompare = speech.versions.length > 1 && focusVersions.length >= 2;
+
+  return `
+    <div class="reader-stack">
+      <div class="card version-focus-card">
+        <div class="panel-head">
+          <div>
+            <h4>Focus Compare</h4>
+            <p class="helper-copy">Pick 2 or 3 versions. Highlight text in any column, then save it as a line from that source version.</p>
+          </div>
+          <div class="button-row">
+            <span class="meta-chip">${focusVersions.length} selected</span>
+            <button class="ghost-button" type="button" data-action="close-version-focus">Back to Version Detail</button>
+            <button class="primary-button" type="button" data-action="save-selected-line">Save Line</button>
+          </div>
+        </div>
+        ${renderVersionFocusPicker(speech, focusVersions)}
+        ${canCompare ? `
+          <div class="version-focus-grid" data-columns="${focusVersions.length}">
+            ${focusVersions.map(renderVersionFocusColumn).join("")}
+          </div>
+        ` : `
+          <div class="empty-state">Add at least two versions to compare.</div>
+        `}
+      </div>
+
+      ${renderSavedLinesTray(speech)}
     </div>
   `;
 }
@@ -5749,7 +5871,7 @@ async function deleteVersion() {
   }
 }
 
-function getSelectedTextForSavedLine() {
+function getSelectedLineSelection() {
   const activeField = document.activeElement;
   if (
     activeField
@@ -5759,32 +5881,35 @@ function getSelectedTextForSavedLine() {
     && typeof activeField.selectionEnd === "number"
     && activeField.selectionEnd > activeField.selectionStart
   ) {
-    return String(activeField.value || "")
+    const text = String(activeField.value || "")
       .slice(activeField.selectionStart, activeField.selectionEnd)
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, 4000);
+    const sourceVersionId = activeField.closest("[data-save-line-version-id]")?.dataset.saveLineVersionId || null;
+    return { text, versionId: sourceVersionId };
   }
 
   const selection = window.getSelection();
   const text = String(selection?.toString() || "").replace(/\s+/g, " ").trim();
 
   if (!text || text.length < 2) {
-    return "";
+    return { text: "", versionId: null };
   }
 
   const range = selection.rangeCount ? selection.getRangeAt(0) : null;
-  if (!range) return text;
+  if (!range) return { text, versionId: null };
 
   const selectedNode = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
     ? range.commonAncestorContainer
     : range.commonAncestorContainer.parentElement;
 
   if (!elements.tabContent.contains(selectedNode) && !elements.editorShell.contains(selectedNode)) {
-    return "";
+    return { text: "", versionId: null };
   }
 
-  return text.slice(0, 4000);
+  const sourceVersionId = selectedNode.closest("[data-save-line-version-id]")?.dataset.saveLineVersionId || null;
+  return { text: text.slice(0, 4000), versionId: sourceVersionId };
 }
 
 async function saveSelectedLine() {
@@ -5792,9 +5917,11 @@ async function saveSelectedLine() {
 
   const speech = ensureSelection();
   const version = getSelectedVersionForSpeech(speech);
-  const text = getSelectedTextForSavedLine();
+  const selectedLine = getSelectedLineSelection();
+  const text = selectedLine.text;
+  const sourceVersion = getVersionById(speech, selectedLine.versionId) || version;
 
-  if (!speech || !version) return;
+  if (!speech || !sourceVersion) return;
 
   if (!text) {
     setPageStatus("Highlight a line or paragraph first, then click Save Line.", "error");
@@ -5809,9 +5936,9 @@ async function saveSelectedLine() {
       .from("brajesh_speech_saved_lines")
       .insert({
         speech_id: speech.id,
-        version_id: version.id,
+        version_id: sourceVersion.id,
         text,
-        source_model: version.sourceModel || "manual",
+        source_model: sourceVersion.sourceModel || "manual",
       });
 
     if (error) throw error;
@@ -6140,6 +6267,8 @@ async function selectSpeech(speechId, options = {}) {
   state.selectedSpeechId = speechId;
   state.selectedVersionId = null;
   state.selectedDeliveryId = null;
+  state.versionFocusOpen = false;
+  state.versionFocusIds = [];
   renderApp();
 
   try {
@@ -6162,6 +6291,8 @@ async function runAction(action) {
     "new-version",
     "paste-llm-rewrite",
     "toggle-version-compare",
+    "open-version-focus",
+    "close-version-focus",
     "delete-version",
     "new-delivery",
     "edit-delivery",
@@ -6322,6 +6453,21 @@ async function runAction(action) {
     return;
   }
 
+  if (action === "open-version-focus" && speech) {
+    const selectedVersion = getSelectedVersionForSpeech(speech);
+    state.versionFocusOpen = true;
+    state.versionCompareOpen = false;
+    state.versionFocusIds = getDefaultFocusVersionIds(speech, selectedVersion);
+    renderApp();
+    return;
+  }
+
+  if (action === "close-version-focus" && speech) {
+    state.versionFocusOpen = false;
+    renderApp();
+    return;
+  }
+
   if (action === "save-selected-line" && speech) {
     await saveSelectedLine();
     return;
@@ -6376,6 +6522,29 @@ function handleSavedLineAction(action, savedLineId) {
   if (action === "delete") {
     void deleteSavedLine(savedLineId);
   }
+}
+
+function toggleFocusVersion(versionId) {
+  const speech = ensureSelection();
+  if (!speech || !versionId) return;
+
+  const focusVersions = getFocusCompareVersions(speech, getSelectedVersionForSpeech(speech));
+  const focusIds = focusVersions.map((version) => version.id);
+  const existingIndex = focusIds.indexOf(versionId);
+
+  if (existingIndex >= 0) {
+    if (focusIds.length <= 2) {
+      setPageStatus("Focus Compare needs at least two versions.", "error");
+      return;
+    }
+
+    focusIds.splice(existingIndex, 1);
+  } else if (focusIds.length < 3) {
+    focusIds.push(versionId);
+  }
+
+  state.versionFocusIds = focusIds;
+  renderApp();
 }
 
 function nextRehearsalBullet() {
@@ -6571,6 +6740,12 @@ elements.tabContent.addEventListener("click", (event) => {
   const savedLineButton = event.target.closest("[data-saved-line-action]");
   if (savedLineButton) {
     handleSavedLineAction(savedLineButton.dataset.savedLineAction, savedLineButton.dataset.savedLineId);
+    return;
+  }
+
+  const focusVersionButton = event.target.closest("[data-focus-version-id]");
+  if (focusVersionButton) {
+    toggleFocusVersion(focusVersionButton.dataset.focusVersionId);
     return;
   }
 

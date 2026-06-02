@@ -1058,6 +1058,91 @@
       height: min(68vh, 720px);
     }
 
+    .version-focus-card {
+      display: grid;
+      gap: 16px;
+    }
+
+    .version-focus-picker {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .version-focus-pill {
+      min-height: 54px;
+      display: inline-grid;
+      gap: 2px;
+      align-content: center;
+      padding: 8px 14px;
+      border-radius: 18px;
+      text-align: left;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .version-focus-pill[aria-pressed="true"] {
+      color: var(--navy);
+      border-color: rgba(123, 183, 255, 0.34);
+      background: rgba(123, 183, 255, 0.1);
+    }
+
+    .version-focus-pill[disabled] {
+      cursor: not-allowed;
+    }
+
+    .version-focus-pill span {
+      font-weight: 700;
+    }
+
+    .version-focus-pill small {
+      color: currentColor;
+      opacity: 0.7;
+      font-size: 0.78rem;
+    }
+
+    .version-focus-grid {
+      display: grid;
+      grid-template-columns: repeat(var(--focus-columns, 2), minmax(0, 1fr));
+      gap: 14px;
+      align-items: start;
+    }
+
+    .version-focus-grid[data-columns="2"] {
+      --focus-columns: 2;
+    }
+
+    .version-focus-grid[data-columns="3"] {
+      --focus-columns: 3;
+    }
+
+    .version-focus-column {
+      min-width: 0;
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      border-radius: 22px;
+      border: 1px solid var(--line);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.018)),
+        rgba(255, 255, 255, 0.018);
+    }
+
+    .version-focus-column-head {
+      display: grid;
+      gap: 10px;
+      align-content: start;
+    }
+
+    .version-focus-column-head h4 {
+      margin-bottom: 4px;
+    }
+
+    .version-focus-script {
+      min-height: min(74vh, 760px);
+    }
+
     .compare-segment-list {
       display: grid;
       gap: min(calc(var(--script-paragraph-gap) * 0.55), 24px);
@@ -1525,6 +1610,7 @@
     .document-shell .script-box,
     .document-shell .collapse-card,
     .document-shell .version-card,
+    .document-shell .version-focus-column,
     .document-shell .delivery-card,
     .document-shell .feedback-card,
     .document-shell .bullet-card,
@@ -1549,6 +1635,18 @@
 
     .document-shell .collapse-card[open] {
       box-shadow: 0 14px 28px rgba(23, 33, 43, 0.08);
+    }
+
+    .document-shell .version-focus-pill {
+      color: var(--paper-muted);
+      border-color: rgba(23, 33, 43, 0.12);
+      background: rgba(255, 255, 255, 0.28);
+    }
+
+    .document-shell .version-focus-pill[aria-pressed="true"] {
+      color: #3f6f9c;
+      border-color: rgba(123, 183, 255, 0.32);
+      background: rgba(123, 183, 255, 0.14);
     }
 
     .document-shell .panel-head h4,
@@ -1864,6 +1962,7 @@
     .document-shell .script-box,
     .document-shell .collapse-card,
     .document-shell .version-card,
+    .document-shell .version-focus-column,
     .document-shell .delivery-card,
     .document-shell .feedback-card,
     .document-shell .bullet-card,
@@ -2596,6 +2695,11 @@
       .speech-list {
         max-height: none;
       }
+
+      .version-focus-grid,
+      .version-focus-grid[data-columns="3"] {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
     }
 
     @media (max-width: 760px) {
@@ -2650,6 +2754,16 @@
       .teleprompter-guide {
         top: 40%;
         width: calc(100% - 28px);
+      }
+
+      .version-focus-grid,
+      .version-focus-grid[data-columns="2"],
+      .version-focus-grid[data-columns="3"] {
+        grid-template-columns: 1fr;
+      }
+
+      .version-focus-script {
+        min-height: auto;
       }
     }
 
@@ -3075,6 +3189,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260601b"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260602a"></script>
 </body>
 </html>
