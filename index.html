@@ -1134,7 +1134,7 @@
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
       gap: 16px;
-      align-items: start;
+      align-items: stretch;
     }
 
     .version-focus-workspace[data-saved-lines-open="false"] {
@@ -1152,6 +1152,7 @@
       top: 12px;
       max-height: calc(100vh - 24px);
       overflow: auto;
+      align-self: stretch;
     }
 
     .version-focus-saved-drawer[data-open="false"] {
@@ -1193,7 +1194,16 @@
     }
 
     .saved-lines-card[data-drawer="true"] {
-      min-height: min(72vh, 720px);
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      min-height: min(74vh, 760px);
+      height: 100%;
+    }
+
+    .saved-lines-card[data-drawer="true"] .saved-line-list,
+    .saved-lines-card[data-drawer="true"] .saved-lines-empty {
+      min-height: 0;
+      overflow: auto;
     }
 
     .saved-lines-card[data-drawer="true"] .saved-line-text {
@@ -2955,6 +2965,15 @@
         overflow: visible;
       }
 
+      .saved-lines-card[data-drawer="true"] {
+        height: auto;
+      }
+
+      .saved-lines-card[data-drawer="true"] .saved-line-list,
+      .saved-lines-card[data-drawer="true"] .saved-lines-empty {
+        overflow: visible;
+      }
+
       .saved-lines-drawer-tab {
         width: 100%;
         min-height: 56px;
@@ -3462,6 +3481,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260602i"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260602j"></script>
 </body>
 </html>
