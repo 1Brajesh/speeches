@@ -5998,6 +5998,7 @@ function hideSelectionBubble() {
 
   elements.selectionBubble.hidden = true;
   elements.selectionBubble.removeAttribute("data-source-version-id");
+  elements.selectionBubble.removeAttribute("data-placement");
 }
 
 function getFocusSelectionDetails() {
@@ -6021,8 +6022,56 @@ function getFocusSelectionDetails() {
 
   return {
     rect,
+    sourceColumn,
     versionId: sourceColumn.dataset.saveLineVersionId || "",
   };
+}
+
+function shouldUseColumnSelectionBubblePlacement() {
+  const isIpadLike = navigator.maxTouchPoints > 1 && /Macintosh|iPad/.test(navigator.userAgent || "");
+  return window.matchMedia?.("(pointer: coarse)")?.matches
+    || window.matchMedia?.("(hover: none)")?.matches
+    || isIpadLike;
+}
+
+function getAlternateFocusColumn(sourceColumn) {
+  const columns = Array.from(elements.tabContent.querySelectorAll(".version-focus-column[data-save-line-version-id]"));
+  const sourceIndex = columns.indexOf(sourceColumn);
+
+  if (sourceIndex < 0 || columns.length < 2) return null;
+
+  return columns[sourceIndex + 1] || columns[sourceIndex - 1] || null;
+}
+
+function placeSelectionBubbleInAlternateColumn(bubble, selectionDetails, dimensions) {
+  const alternateColumn = getAlternateFocusColumn(selectionDetails.sourceColumn);
+  if (!alternateColumn) return false;
+
+  const columnRect = alternateColumn.getBoundingClientRect();
+  if (columnRect.width <= 0 || columnRect.height <= 0) return false;
+  if (columnRect.bottom < 0 || columnRect.top > window.innerHeight) return false;
+  if (Math.abs(columnRect.left - selectionDetails.sourceColumn.getBoundingClientRect().left) < 8) return false;
+
+  const viewportPadding = 8;
+  const gap = 12;
+  const bubbleWidth = dimensions.width;
+  const bubbleHeight = dimensions.height;
+  const columnLeft = Math.max(columnRect.left + viewportPadding, viewportPadding);
+  const columnRight = Math.min(columnRect.right - viewportPadding, window.innerWidth - viewportPadding);
+  const columnCenterLeft = columnRect.left + (columnRect.width / 2) - (bubbleWidth / 2);
+  const maxLeft = Math.max(columnLeft, columnRight - bubbleWidth);
+  const left = Math.min(Math.max(columnCenterLeft, columnLeft), maxLeft);
+  let top = selectionDetails.rect.top - bubbleHeight - gap;
+
+  if (top < viewportPadding) {
+    top = selectionDetails.rect.top + gap;
+  }
+
+  const maxTop = Math.max(viewportPadding, window.innerHeight - bubbleHeight - viewportPadding);
+  bubble.dataset.placement = "alternate-column";
+  bubble.style.left = `${Math.round(left)}px`;
+  bubble.style.top = `${Math.round(Math.min(Math.max(top, viewportPadding), maxTop))}px`;
+  return true;
 }
 
 function syncSelectionBubble() {
@@ -6042,6 +6091,13 @@ function syncSelectionBubble() {
 
   const bubbleWidth = bubble.offsetWidth || 1;
   const bubbleHeight = bubble.offsetHeight || 1;
+  if (
+    shouldUseColumnSelectionBubblePlacement()
+    && placeSelectionBubbleInAlternateColumn(bubble, selectionDetails, { width: bubbleWidth, height: bubbleHeight })
+  ) {
+    return;
+  }
+
   const viewportPadding = 8;
   const gap = 10;
   const preferredLeft = selectionDetails.rect.left + (selectionDetails.rect.width / 2) - (bubbleWidth / 2);
@@ -6054,6 +6110,7 @@ function syncSelectionBubble() {
   }
 
   const maxTop = Math.max(viewportPadding, window.innerHeight - bubbleHeight - viewportPadding);
+  bubble.dataset.placement = "selection";
   bubble.style.left = `${Math.round(left)}px`;
   bubble.style.top = `${Math.round(Math.min(Math.max(top, viewportPadding), maxTop))}px`;
 }
