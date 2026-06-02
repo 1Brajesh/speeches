@@ -2355,6 +2355,13 @@ function getSelectedDeliveryForSpeech(speech) {
   return sortDeliveries(speech.deliveries)[0];
 }
 
+function isFocusCompareActive() {
+  return state.workspaceView === "speeches"
+    && state.tab === "versions"
+    && state.versionFocusOpen
+    && Boolean(getSpeechById(state.selectedSpeechId));
+}
+
 function getSpeechVersionCount(speech) {
   if (!speech) return 0;
   return speech.detailLoaded ? speech.versions.length : (speech.versionCount || 0);
@@ -3901,6 +3908,7 @@ function renderVersionFocusCompare(speech, selectedVersion) {
         <div class="panel-head">
           <div>
             <h4>Focus Compare</h4>
+            <p class="version-focus-title">${displayText(speech.title)}</p>
             <p class="helper-copy">Pick 2 or 3 versions. Highlight text in any column, then save it as a line from that source version.</p>
           </div>
           <div class="button-row">
@@ -6661,6 +6669,7 @@ function handleFullscreenBodyClick(event) {
 }
 
 function renderApp() {
+  elements.appShell.dataset.focusMode = String(isFocusCompareActive());
   renderTopActions();
   renderWorkspaceRail();
   renderCounts();
