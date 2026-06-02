@@ -6048,9 +6048,10 @@ function placeSelectionBubbleInAlternateColumn(bubble, selectionDetails, dimensi
   if (!alternateColumn) return false;
 
   const columnRect = alternateColumn.getBoundingClientRect();
+  const sourceRect = selectionDetails.sourceColumn.getBoundingClientRect();
   if (columnRect.width <= 0 || columnRect.height <= 0) return false;
   if (columnRect.bottom < 0 || columnRect.top > window.innerHeight) return false;
-  if (Math.abs(columnRect.left - selectionDetails.sourceColumn.getBoundingClientRect().left) < 8) return false;
+  if (Math.abs(columnRect.left - sourceRect.left) < 8) return false;
 
   const viewportPadding = 8;
   const gap = 12;
@@ -6058,9 +6059,12 @@ function placeSelectionBubbleInAlternateColumn(bubble, selectionDetails, dimensi
   const bubbleHeight = dimensions.height;
   const columnLeft = Math.max(columnRect.left + viewportPadding, viewportPadding);
   const columnRight = Math.min(columnRect.right - viewportPadding, window.innerWidth - viewportPadding);
-  const columnCenterLeft = columnRect.left + (columnRect.width / 2) - (bubbleWidth / 2);
   const maxLeft = Math.max(columnLeft, columnRight - bubbleWidth);
-  const left = Math.min(Math.max(columnCenterLeft, columnLeft), maxLeft);
+  const neighborIsRight = columnRect.left > sourceRect.left;
+  const edgeLeft = neighborIsRight
+    ? columnLeft
+    : columnRight - bubbleWidth;
+  const left = Math.min(Math.max(edgeLeft, columnLeft), maxLeft);
   let top = selectionDetails.rect.top - bubbleHeight - gap;
 
   if (top < viewportPadding) {

@@ -126,7 +126,7 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
   - selected Focus Compare versions can be moved left/right by clicking pill edges, and the order is saved on the speech for reuse across devices.
   - Focus Compare hides the speech library rail and expands the comparison workspace to full browser width.
   - Focus Compare shows a floating Save/Copy bubble next to highlighted text and keeps a collapsible Saved Lines drawer, so highlighted lines can be saved/copied without scrolling back to the top or bottom.
-  - On touch/tablet devices, the Focus Compare Save/Copy bubble appears in a neighboring comparison column when possible, avoiding native text-selection handles while preserving the selected source version.
+  - On touch/tablet devices, the Focus Compare Save/Copy bubble appears near the shared edge of a neighboring comparison column when possible, avoiding native text-selection handles while preserving the selected source version.
   - Saved Lines cards default to a compact text-first view with source chips; expanding a line reveals metadata and actions.
   - the selected version can be deleted from the `Versions` detail header when the speech has more than one version.
   - `Edit Script` uses a collapsible `Rehearsal Bullets` panel.
@@ -159,7 +159,7 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
 
 - Important: when speeches UI changes appear not to register after deploy, check for stale cached JS.
 - The speeches page currently cache-busts the module URL in `index.html`:
-  - `./assets/js/brajesh-speeches.js?v=20260602h`
+  - `./assets/js/brajesh-speeches.js?v=20260602i`
 - If future speeches JS changes appear missing in production, bump that query-string version.
 
 ## Useful Starting Point
