@@ -1078,6 +1078,76 @@
       font-weight: 700;
     }
 
+    .version-focus-workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .version-focus-main {
+      min-width: 0;
+      display: grid;
+      gap: 14px;
+    }
+
+    .version-focus-toolbar {
+      position: sticky;
+      top: 12px;
+      z-index: 5;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--line);
+      background:
+        linear-gradient(180deg, rgba(23, 34, 47, 0.94), rgba(23, 34, 47, 0.86)),
+        var(--surface);
+      box-shadow: 0 18px 36px rgba(0, 0, 0, 0.22);
+      backdrop-filter: blur(18px);
+    }
+
+    .version-focus-toolbar strong,
+    .version-focus-toolbar span {
+      display: block;
+    }
+
+    .version-focus-toolbar strong {
+      color: var(--text);
+      font-size: 0.86rem;
+    }
+
+    .version-focus-toolbar span {
+      margin-top: 2px;
+      color: var(--faint);
+      font-size: 0.84rem;
+      line-height: 1.35;
+    }
+
+    .version-focus-saved-drawer {
+      position: sticky;
+      top: 12px;
+      max-height: calc(100vh - 24px);
+      overflow: auto;
+    }
+
+    .saved-lines-card[data-drawer="true"] {
+      min-height: min(72vh, 720px);
+    }
+
+    .saved-lines-card[data-drawer="true"] .saved-line-text {
+      font-family: var(--sans);
+      font-size: 0.96rem;
+      line-height: 1.45;
+    }
+
+    .saved-lines-card[data-drawer="true"] .saved-line-actions {
+      justify-content: flex-start;
+    }
+
     .version-focus-picker {
       display: flex;
       flex-wrap: wrap;
@@ -1731,6 +1801,22 @@
     .document-shell .version-focus-edge-button:not([disabled]):hover,
     .document-shell .version-focus-edge-button:not([disabled]):focus-visible {
       background: rgba(123, 183, 255, 0.12);
+    }
+
+    .document-shell .version-focus-toolbar {
+      border-color: rgba(23, 33, 43, 0.1);
+      background:
+        linear-gradient(180deg, rgba(246, 239, 229, 0.92), rgba(239, 229, 213, 0.86)),
+        rgba(255, 255, 255, 0.72);
+      box-shadow: 0 16px 28px rgba(23, 33, 43, 0.1);
+    }
+
+    .document-shell .version-focus-toolbar strong {
+      color: var(--paper-ink);
+    }
+
+    .document-shell .version-focus-toolbar span {
+      color: var(--paper-faint);
     }
 
     .document-shell .panel-head h4,
@@ -2785,6 +2871,16 @@
       .version-focus-grid[data-columns="3"] {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
+
+      .version-focus-workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .version-focus-saved-drawer {
+        position: static;
+        max-height: none;
+        overflow: visible;
+      }
     }
 
     @media (max-width: 760px) {
@@ -2849,6 +2945,20 @@
 
       .version-focus-script {
         min-height: auto;
+      }
+
+      .version-focus-toolbar {
+        top: 8px;
+        align-items: stretch;
+      }
+
+      .version-focus-toolbar .button-row {
+        width: 100%;
+      }
+
+      .version-focus-toolbar .ghost-button,
+      .version-focus-toolbar .primary-button {
+        flex: 1 1 0;
       }
     }
 
@@ -3274,6 +3384,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260602d"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260602e"></script>
 </body>
 </html>

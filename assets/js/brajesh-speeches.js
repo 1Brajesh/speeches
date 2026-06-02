@@ -1497,7 +1497,12 @@ function buildSpeechDeliveries(runRows) {
 }
 
 function buildSpeechSavedLines(savedLineRows) {
-  return (savedLineRows || []).map((row) => ({
+  return (savedLineRows || []).map(mapSpeechSavedLine)
+    .sort((a, b) => timestampMs(b.createdAt || b.updatedAt) - timestampMs(a.createdAt || a.updatedAt));
+}
+
+function mapSpeechSavedLine(row) {
+  return {
     id: row.id,
     versionId: row.version_id || null,
     text: row.text || "",
@@ -1506,7 +1511,7 @@ function buildSpeechSavedLines(savedLineRows) {
     used: Boolean(row.used),
     createdAt: row.created_at || "",
     updatedAt: row.updated_at || row.created_at || "",
-  })).sort((a, b) => timestampMs(b.createdAt || b.updatedAt) - timestampMs(a.createdAt || a.updatedAt));
+  };
 }
 
 function applySpeechDetail(speechId, versionRows, runRows, savedLineRows = []) {
@@ -3904,30 +3909,46 @@ function renderVersionFocusCompare(speech, selectedVersion) {
 
   return `
     <div class="reader-stack">
-      <div class="card version-focus-card">
-        <div class="panel-head">
-          <div>
-            <h4>Focus Compare</h4>
-            <p class="version-focus-title">${displayText(speech.title)}</p>
-            <p class="helper-copy">Pick 2 or 3 versions. Highlight text in any column, then save it as a line from that source version.</p>
+      <div class="version-focus-workspace">
+        <div class="version-focus-main">
+          <div class="version-focus-toolbar">
+            <div>
+              <strong>Selection</strong>
+              <span>Highlight text in any column, then save or copy without leaving your place.</span>
+            </div>
+            <div class="button-row">
+              <button class="ghost-button" type="button" data-action="copy-selected-line">Copy Highlight</button>
+              <button class="primary-button" type="button" data-action="save-selected-line">Save Highlight</button>
+            </div>
           </div>
-          <div class="button-row">
-            <span class="meta-chip">${focusVersions.length} selected</span>
-            <button class="ghost-button" type="button" data-action="close-version-focus">Back to Version Detail</button>
-            <button class="primary-button" type="button" data-action="save-selected-line">Save Line</button>
+
+          <div class="card version-focus-card">
+            <div class="panel-head">
+              <div>
+                <h4>Focus Compare</h4>
+                <p class="version-focus-title">${displayText(speech.title)}</p>
+                <p class="helper-copy">Pick 2 or 3 versions. Highlight text in any column, then save it as a line from that source version.</p>
+              </div>
+              <div class="button-row">
+                <span class="meta-chip">${focusVersions.length} selected</span>
+                <button class="ghost-button" type="button" data-action="close-version-focus">Back to Version Detail</button>
+              </div>
+            </div>
+            ${renderVersionFocusPicker(speech, focusVersions)}
+            ${canCompare ? `
+              <div class="version-focus-grid" data-columns="${focusVersions.length}">
+                ${focusVersions.map(renderVersionFocusColumn).join("")}
+              </div>
+            ` : `
+              <div class="empty-state">Add at least two versions to compare.</div>
+            `}
           </div>
         </div>
-        ${renderVersionFocusPicker(speech, focusVersions)}
-        ${canCompare ? `
-          <div class="version-focus-grid" data-columns="${focusVersions.length}">
-            ${focusVersions.map(renderVersionFocusColumn).join("")}
-          </div>
-        ` : `
-          <div class="empty-state">Add at least two versions to compare.</div>
-        `}
-      </div>
 
-      ${renderSavedLinesTray(speech)}
+        <aside class="version-focus-saved-drawer">
+          ${renderSavedLinesTray(speech, { drawer: true })}
+        </aside>
+      </div>
     </div>
   `;
 }
@@ -3965,11 +3986,12 @@ function renderSavedLineItem(speech, savedLine, options = {}) {
 
 function renderSavedLinesTray(speech, options = {}) {
   const compact = Boolean(options.compact);
+  const drawer = Boolean(options.drawer);
   const savedLines = speech.savedLines || [];
   const unusedCount = savedLines.filter((line) => !line.used).length;
 
   return `
-    <div class="card saved-lines-card" data-compact="${String(compact)}">
+    <div class="card saved-lines-card" data-compact="${String(compact)}" data-drawer="${String(drawer)}">
       <div class="panel-head">
         <div>
           <h4>Saved Lines</h4>
@@ -3978,7 +4000,7 @@ function renderSavedLinesTray(speech, options = {}) {
         <div class="button-row">
           <span class="meta-chip">${savedLines.length} saved</span>
           <span class="meta-chip">${unusedCount} unused</span>
-          ${compact ? "" : `<button class="primary-button" type="button" data-action="save-selected-line">Save Line</button>`}
+          ${compact || drawer ? "" : `<button class="primary-button" type="button" data-action="save-selected-line">Save Line</button>`}
         </div>
       </div>
       ${savedLines.length ? `
@@ -3990,6 +4012,14 @@ function renderSavedLinesTray(speech, options = {}) {
       `}
     </div>
   `;
+}
+
+function renderFocusSavedLinesDrawer(speech) {
+  const drawer = elements.tabContent.querySelector(".version-focus-saved-drawer");
+  if (!drawer) return false;
+
+  drawer.innerHTML = renderSavedLinesTray(speech, { drawer: true });
+  return true;
 }
 
 function renderRunsTab(speech) {
@@ -5936,6 +5966,18 @@ function getSelectedLineSelection() {
   return { text: text.slice(0, 4000), versionId: sourceVersionId };
 }
 
+function getWindowScrollSnapshot() {
+  return { x: window.scrollX || 0, y: window.scrollY || 0 };
+}
+
+function restoreWindowScroll(snapshot) {
+  if (!snapshot) return;
+
+  window.requestAnimationFrame(() => {
+    window.scrollTo(snapshot.x, snapshot.y);
+  });
+}
+
 async function saveSelectedLine() {
   if (savedLineBusy) return;
 
@@ -5954,26 +5996,63 @@ async function saveSelectedLine() {
 
   savedLineBusy = true;
   setPageStatus("Saving line...");
+  const scrollSnapshot = isFocusCompareActive() ? getWindowScrollSnapshot() : null;
 
   try {
-    const { error } = await db
+    const { data, error } = await db
       .from("brajesh_speech_saved_lines")
       .insert({
         speech_id: speech.id,
         version_id: sourceVersion.id,
         text,
         source_model: sourceVersion.sourceModel || "manual",
-      });
+      })
+      .select("id, speech_id, version_id, text, source_model, note, used, created_at, updated_at")
+      .single();
 
     if (error) throw error;
 
-    await loadSpeechDetail(speech.id, { force: true, renderAfter: false });
-    renderApp();
+    if (isFocusCompareActive() && data) {
+      speech.savedLines = buildSpeechSavedLines([
+        data,
+        ...(speech.savedLines || []).map((line) => ({
+          id: line.id,
+          version_id: line.versionId,
+          text: line.text,
+          source_model: line.sourceModel,
+          note: line.note,
+          used: line.used,
+          created_at: line.createdAt,
+          updated_at: line.updatedAt,
+        })),
+      ]);
+      renderFocusSavedLinesDrawer(speech);
+    } else {
+      await loadSpeechDetail(speech.id, { force: true, renderAfter: false });
+      renderApp();
+    }
+    restoreWindowScroll(scrollSnapshot);
     setPageStatus("Line saved.", "ok");
   } catch (error) {
     setPageStatus(error.message || "Could not save that line.", "error");
   } finally {
     savedLineBusy = false;
+  }
+}
+
+async function copySelectedLine() {
+  const selectedLine = getSelectedLineSelection();
+
+  if (!selectedLine.text) {
+    setPageStatus("Highlight a line or paragraph first, then click Copy Highlight.", "error");
+    return;
+  }
+
+  try {
+    await copyTextToClipboard(selectedLine.text);
+    setPageStatus("Highlight copied.", "ok");
+  } catch (error) {
+    setPageStatus(error.message || "Could not copy that highlight.", "error");
   }
 }
 
@@ -5998,18 +6077,26 @@ async function toggleSavedLineUsed(savedLineId) {
   if (!speech || !savedLine) return;
 
   savedLineBusy = true;
+  const scrollSnapshot = isFocusCompareActive() ? getWindowScrollSnapshot() : null;
+  const nextUsedState = !savedLine.used;
 
   try {
     const { error } = await db
       .from("brajesh_speech_saved_lines")
-      .update({ used: !savedLine.used })
+      .update({ used: nextUsedState })
       .eq("id", savedLine.id);
 
     if (error) throw error;
 
-    await loadSpeechDetail(speech.id, { force: true, renderAfter: false });
-    renderApp();
-    setPageStatus(savedLine.used ? "Saved line marked unused." : "Saved line marked used.", "ok");
+    if (isFocusCompareActive()) {
+      savedLine.used = nextUsedState;
+      renderFocusSavedLinesDrawer(speech);
+    } else {
+      await loadSpeechDetail(speech.id, { force: true, renderAfter: false });
+      renderApp();
+    }
+    restoreWindowScroll(scrollSnapshot);
+    setPageStatus(nextUsedState ? "Saved line marked used." : "Saved line marked unused.", "ok");
   } catch (error) {
     setPageStatus(error.message || "Could not update that saved line.", "error");
   } finally {
@@ -6029,6 +6116,7 @@ async function deleteSavedLine(savedLineId) {
   }
 
   savedLineBusy = true;
+  const scrollSnapshot = isFocusCompareActive() ? getWindowScrollSnapshot() : null;
 
   try {
     const { error } = await db
@@ -6038,8 +6126,14 @@ async function deleteSavedLine(savedLineId) {
 
     if (error) throw error;
 
-    await loadSpeechDetail(speech.id, { force: true, renderAfter: false });
-    renderApp();
+    if (isFocusCompareActive()) {
+      speech.savedLines = (speech.savedLines || []).filter((line) => line.id !== savedLine.id);
+      renderFocusSavedLinesDrawer(speech);
+    } else {
+      await loadSpeechDetail(speech.id, { force: true, renderAfter: false });
+      renderApp();
+    }
+    restoreWindowScroll(scrollSnapshot);
     setPageStatus("Saved line deleted.", "ok");
   } catch (error) {
     setPageStatus(error.message || "Could not delete that saved line.", "error");
@@ -6497,6 +6591,11 @@ async function runAction(action) {
     return;
   }
 
+  if (action === "copy-selected-line" && speech) {
+    await copySelectedLine();
+    return;
+  }
+
   if (action === "delete-version" && speech) {
     deleteVersion();
     return;
@@ -6869,8 +6968,8 @@ elements.tabContent.addEventListener("click", (event) => {
 });
 
 function preserveSavedLineSelection(event) {
-  const saveLineButton = event.target.closest('[data-action="save-selected-line"]');
-  if (saveLineButton) {
+  const selectionActionButton = event.target.closest('[data-action="save-selected-line"], [data-action="copy-selected-line"]');
+  if (selectionActionButton) {
     event.preventDefault();
   }
 }
