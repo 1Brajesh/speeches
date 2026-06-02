@@ -987,10 +987,13 @@
     .saved-line-list {
       display: grid;
       gap: 12px;
+      align-content: start;
+      grid-auto-rows: max-content;
     }
 
     .saved-line-item {
       display: grid;
+      align-self: start;
       padding: 8px 12px;
       border-radius: 18px;
       border: 1px solid rgba(167, 144, 255, 0.2);
@@ -1200,6 +1203,10 @@
     .saved-lines-card[data-drawer="true"] .saved-lines-empty {
       min-height: 0;
       overflow: auto;
+    }
+
+    .saved-lines-card[data-drawer="true"] .saved-lines-empty {
+      align-self: start;
     }
 
     .saved-lines-card[data-drawer="true"] .saved-line-text {
@@ -3477,6 +3484,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260602m"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260602n"></script>
 </body>
 </html>
