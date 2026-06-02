@@ -1091,42 +1091,6 @@
       gap: 14px;
     }
 
-    .version-focus-toolbar {
-      position: sticky;
-      top: 12px;
-      z-index: 5;
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      gap: 12px;
-      align-items: center;
-      padding: 12px 14px;
-      border-radius: 20px;
-      border: 1px solid var(--line);
-      background:
-        linear-gradient(180deg, rgba(23, 34, 47, 0.94), rgba(23, 34, 47, 0.86)),
-        var(--surface);
-      box-shadow: 0 18px 36px rgba(0, 0, 0, 0.22);
-      backdrop-filter: blur(18px);
-    }
-
-    .version-focus-toolbar strong,
-    .version-focus-toolbar span {
-      display: block;
-    }
-
-    .version-focus-toolbar strong {
-      color: var(--text);
-      font-size: 0.86rem;
-    }
-
-    .version-focus-toolbar span {
-      margin-top: 2px;
-      color: var(--faint);
-      font-size: 0.84rem;
-      line-height: 1.35;
-    }
-
     .version-focus-saved-drawer {
       position: sticky;
       top: 12px;
@@ -1142,6 +1106,37 @@
       font-family: var(--sans);
       font-size: 0.96rem;
       line-height: 1.45;
+    }
+
+    .selection-bubble {
+      position: fixed;
+      left: 0;
+      top: 0;
+      z-index: 80;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px;
+      border: 1px solid rgba(123, 183, 255, 0.24);
+      border-radius: 999px;
+      background:
+        linear-gradient(180deg, rgba(27, 39, 55, 0.96), rgba(18, 27, 39, 0.94)),
+        var(--surface);
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
+      backdrop-filter: blur(18px);
+    }
+
+    .selection-bubble[hidden] {
+      display: none !important;
+    }
+
+    .selection-bubble button {
+      min-height: 34px;
+      padding: 0 12px;
+      border-radius: 999px;
+      font-size: 0.84rem;
+      line-height: 1;
+      white-space: nowrap;
     }
 
     .saved-lines-card[data-drawer="true"] .saved-line-actions {
@@ -1801,22 +1796,6 @@
     .document-shell .version-focus-edge-button:not([disabled]):hover,
     .document-shell .version-focus-edge-button:not([disabled]):focus-visible {
       background: rgba(123, 183, 255, 0.12);
-    }
-
-    .document-shell .version-focus-toolbar {
-      border-color: rgba(23, 33, 43, 0.1);
-      background:
-        linear-gradient(180deg, rgba(246, 239, 229, 0.92), rgba(239, 229, 213, 0.86)),
-        rgba(255, 255, 255, 0.72);
-      box-shadow: 0 16px 28px rgba(23, 33, 43, 0.1);
-    }
-
-    .document-shell .version-focus-toolbar strong {
-      color: var(--paper-ink);
-    }
-
-    .document-shell .version-focus-toolbar span {
-      color: var(--paper-faint);
     }
 
     .document-shell .panel-head h4,
@@ -2947,19 +2926,6 @@
         min-height: auto;
       }
 
-      .version-focus-toolbar {
-        top: 8px;
-        align-items: stretch;
-      }
-
-      .version-focus-toolbar .button-row {
-        width: 100%;
-      }
-
-      .version-focus-toolbar .ghost-button,
-      .version-focus-toolbar .primary-button {
-        flex: 1 1 0;
-      }
     }
 
     @media (max-width: 1180px) and (orientation: landscape) {
@@ -3383,7 +3349,12 @@
     </div>
   </section>
 
+  <div class="selection-bubble" id="selectionBubble" hidden>
+    <button class="ghost-button" type="button" data-selection-bubble-action="copy">Copy</button>
+    <button class="primary-button" type="button" data-selection-bubble-action="save">Save</button>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260602e"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260602f"></script>
 </body>
 </html>

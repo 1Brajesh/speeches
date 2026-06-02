@@ -136,6 +136,7 @@ let settingsSaveQueued = false;
 let backupBusy = false;
 let rehearsalFitFrame = 0;
 let teleprompterFrame = 0;
+let selectionBubbleFrame = 0;
 
 const elements = {
   pageStatus: document.querySelector("#pageStatus"),
@@ -209,6 +210,7 @@ const elements = {
   fasterTeleprompterButton: document.querySelector("#fasterTeleprompterButton"),
   resetTeleprompterButton: document.querySelector("#resetTeleprompterButton"),
   exitTeleprompterButton: document.querySelector("#exitTeleprompterButton"),
+  selectionBubble: document.querySelector("#selectionBubble"),
 };
 
 function setStatusElement(element, text, tone = "") {
@@ -3911,17 +3913,6 @@ function renderVersionFocusCompare(speech, selectedVersion) {
     <div class="reader-stack">
       <div class="version-focus-workspace">
         <div class="version-focus-main">
-          <div class="version-focus-toolbar">
-            <div>
-              <strong>Selection</strong>
-              <span>Highlight text in any column, then save or copy without leaving your place.</span>
-            </div>
-            <div class="button-row">
-              <button class="ghost-button" type="button" data-action="copy-selected-line">Copy Highlight</button>
-              <button class="primary-button" type="button" data-action="save-selected-line">Save Highlight</button>
-            </div>
-          </div>
-
           <div class="card version-focus-card">
             <div class="panel-head">
               <div>
@@ -5966,6 +5957,76 @@ function getSelectedLineSelection() {
   return { text: text.slice(0, 4000), versionId: sourceVersionId };
 }
 
+function hideSelectionBubble() {
+  if (!elements.selectionBubble) return;
+
+  elements.selectionBubble.hidden = true;
+  elements.selectionBubble.removeAttribute("data-source-version-id");
+}
+
+function getFocusSelectionDetails() {
+  if (!isFocusCompareActive()) return null;
+
+  const selection = window.getSelection();
+  const text = String(selection?.toString() || "").replace(/\s+/g, " ").trim();
+  if (!selection || !text || text.length < 2 || selection.rangeCount === 0) return null;
+
+  const range = selection.getRangeAt(0);
+  const selectedNode = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+    ? range.commonAncestorContainer
+    : range.commonAncestorContainer.parentElement;
+  const sourceColumn = selectedNode?.closest?.(".version-focus-column[data-save-line-version-id]");
+
+  if (!sourceColumn || !elements.tabContent.contains(sourceColumn)) return null;
+
+  const rects = Array.from(range.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0);
+  const rect = rects[rects.length - 1] || range.getBoundingClientRect();
+  if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+
+  return {
+    rect,
+    versionId: sourceColumn.dataset.saveLineVersionId || "",
+  };
+}
+
+function syncSelectionBubble() {
+  selectionBubbleFrame = 0;
+
+  if (!elements.selectionBubble) return;
+
+  const selectionDetails = getFocusSelectionDetails();
+  if (!selectionDetails) {
+    hideSelectionBubble();
+    return;
+  }
+
+  const bubble = elements.selectionBubble;
+  bubble.hidden = false;
+  bubble.dataset.sourceVersionId = selectionDetails.versionId;
+
+  const bubbleWidth = bubble.offsetWidth || 1;
+  const bubbleHeight = bubble.offsetHeight || 1;
+  const viewportPadding = 8;
+  const gap = 10;
+  const preferredLeft = selectionDetails.rect.left + (selectionDetails.rect.width / 2) - (bubbleWidth / 2);
+  const maxLeft = Math.max(viewportPadding, window.innerWidth - bubbleWidth - viewportPadding);
+  const left = Math.min(Math.max(preferredLeft, viewportPadding), maxLeft);
+  let top = selectionDetails.rect.top - bubbleHeight - gap;
+
+  if (top < viewportPadding) {
+    top = selectionDetails.rect.bottom + gap;
+  }
+
+  const maxTop = Math.max(viewportPadding, window.innerHeight - bubbleHeight - viewportPadding);
+  bubble.style.left = `${Math.round(left)}px`;
+  bubble.style.top = `${Math.round(Math.min(Math.max(top, viewportPadding), maxTop))}px`;
+}
+
+function scheduleSelectionBubbleSync() {
+  if (selectionBubbleFrame) return;
+  selectionBubbleFrame = window.requestAnimationFrame(syncSelectionBubble);
+}
+
 function getWindowScrollSnapshot() {
   return { x: window.scrollX || 0, y: window.scrollY || 0 };
 }
@@ -6044,7 +6105,7 @@ async function copySelectedLine() {
   const selectedLine = getSelectedLineSelection();
 
   if (!selectedLine.text) {
-    setPageStatus("Highlight a line or paragraph first, then click Copy Highlight.", "error");
+    setPageStatus("Highlight a line or paragraph first, then click Copy.", "error");
     return;
   }
 
@@ -6769,6 +6830,9 @@ function handleFullscreenBodyClick(event) {
 
 function renderApp() {
   elements.appShell.dataset.focusMode = String(isFocusCompareActive());
+  if (!isFocusCompareActive()) {
+    hideSelectionBubble();
+  }
   renderTopActions();
   renderWorkspaceRail();
   renderCounts();
@@ -6784,6 +6848,7 @@ function renderApp() {
   }
   syncAllScriptPreferenceControls(elements.tabContent);
   syncSettingsStatus(elements.tabContent);
+  scheduleSelectionBubbleSync();
 }
 
 elements.loginForm.addEventListener("submit", async (event) => {
@@ -6976,6 +7041,36 @@ function preserveSavedLineSelection(event) {
 
 elements.tabContent.addEventListener("mousedown", preserveSavedLineSelection);
 elements.editorShell.addEventListener("mousedown", preserveSavedLineSelection);
+
+if (elements.selectionBubble) {
+  elements.selectionBubble.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+  });
+
+  elements.selectionBubble.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+  });
+
+  elements.selectionBubble.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-selection-bubble-action]");
+    if (!button) return;
+
+    event.preventDefault();
+
+    if (button.dataset.selectionBubbleAction === "save") {
+      void saveSelectedLine().then(hideSelectionBubble);
+      return;
+    }
+
+    if (button.dataset.selectionBubbleAction === "copy") {
+      void copySelectedLine().then(hideSelectionBubble);
+    }
+  });
+}
+
+document.addEventListener("selectionchange", scheduleSelectionBubbleSync);
+window.addEventListener("scroll", scheduleSelectionBubbleSync, true);
+window.addEventListener("resize", scheduleSelectionBubbleSync);
 
 elements.editorShell.addEventListener("click", (event) => {
   const savedLineButton = event.target.closest("[data-saved-line-action]");
