@@ -3961,10 +3961,6 @@ function renderSavedLineItem(speech, savedLine, options = {}) {
     <details class="saved-line-item" data-used="${String(savedLine.used)}">
       <summary class="saved-line-summary">
         <p class="saved-line-text">${displayText(savedLine.text)}</p>
-        <span class="saved-line-summary-meta">
-          ${renderSavedLineSourceChip(savedLine)}
-          ${savedLine.used ? `<span class="meta-chip">Used</span>` : ""}
-        </span>
       </summary>
       <div class="saved-line-details">
         <div class="saved-line-meta">
