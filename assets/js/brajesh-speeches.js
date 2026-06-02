@@ -26,6 +26,21 @@ const TELEPROMPTER_MIN_DURATION_MS = 30000;
 const TELEPROMPTER_SPEED_MIN = 0.5;
 const TELEPROMPTER_SPEED_MAX = 10;
 const TELEPROMPTER_SPEED_STEP = 0.1;
+const VERSION_TYPE_OPTIONS = [
+  { value: "standard", label: "Standard" },
+  { value: "raw", label: "Raw Draft" },
+  { value: "llm_rewrite", label: "LLM Rewrite" },
+  { value: "composite", label: "Composite" },
+  { value: "final", label: "Final" },
+  { value: "other", label: "Other" },
+];
+const VERSION_SOURCE_OPTIONS = [
+  { value: "manual", label: "Manual" },
+  { value: "grok", label: "Grok" },
+  { value: "claude", label: "Claude" },
+  { value: "chatgpt", label: "ChatGPT" },
+  { value: "other", label: "Other" },
+];
 
 const state = {
   user: null,
@@ -94,6 +109,8 @@ const state = {
     sourceVersionId: null,
     sourceIdeaId: null,
     entryPoint: null,
+    versionType: null,
+    sourceModel: null,
   },
 };
 let pageLoadPromise = null;
@@ -1434,6 +1451,9 @@ function buildSpeechVersions(versionRows) {
     label: row.label || "Untitled Version",
     basedOn: row.based_on_version_id || null,
     estimatedMinutes: row.estimated_minutes || 0,
+    versionType: row.version_type || "standard",
+    sourceModel: row.source_model || "manual",
+    sourcePrompt: row.source_prompt || "",
     updatedAt: row.updated_at || row.created_at || "",
     revisionNote: row.revision_note || "",
     speechBody: row.speech_body || "",
@@ -1533,7 +1553,7 @@ async function loadSpeechDetail(speechId, options = {}) {
   promise = Promise.all([
     db
       .from("brajesh_speech_versions")
-      .select("id, speech_id, based_on_version_id, label, estimated_minutes, revision_note, speech_body, rehearsal_bullets, created_at, updated_at")
+      .select("id, speech_id, based_on_version_id, label, estimated_minutes, version_type, source_model, source_prompt, revision_note, speech_body, rehearsal_bullets, created_at, updated_at")
       .eq("speech_id", speechId)
       .order("created_at", { ascending: true }),
     db
@@ -3393,7 +3413,7 @@ function renderFocusCard(speech, version) {
     <div class="focus-block" data-size="wide">
       <strong>Active Version</strong>
       <p>${displayText(version?.label)}</p>
-      <span class="helper-copy">${displayText(writingLine)}</span>
+      <div class="meta-row">${renderVersionMetadataChips(version)}<span class="helper-copy">${displayText(writingLine)}</span></div>
       <div class="focus-details">
         <div class="focus-detail">
           <span class="focus-label">Revision Note</span>
@@ -3605,6 +3625,7 @@ function renderVersionsTab(speech) {
                 <div class="version-title">${displayText(version.label)}</div>
                 <div class="timeline-meta">
                   <span>${displayText(`Last edited ${formatDateTime(version.updatedAt)}`)}</span>
+                  ${renderVersionMetadataChips(version)}
                   <span>${version.estimatedMinutes} min</span>
                   <span>${versionWordCount(version)} words</span>
                   <span>${version.rehearsalBullets.length} bullets</span>
@@ -3622,7 +3643,9 @@ function renderVersionsTab(speech) {
           <div class="button-row">
             <span class="meta-chip">${displayText(basedOnVersion ? `Based on ${basedOnVersion.label}` : "Original version")}</span>
             <span class="meta-chip">${displayText(editTimestampLabel)}</span>
+            ${renderVersionMetadataChips(selectedVersion)}
           <button class="ghost-button new-version-action-button" type="button" data-action="new-version">New Version</button>
+          <button class="ghost-button" type="button" data-action="paste-llm-rewrite">Paste LLM Rewrite</button>
           <button class="ghost-button" type="button" data-action="start-teleprompter">Teleprompter</button>
           <button class="script-button" type="button" data-action="edit-version">Edit Script</button>
           ${compareVersion
@@ -3994,6 +4017,8 @@ function openSpeechEditor({ speechId = null, statusPreset = "draft", sourceIdeaI
     sourceVersionId: null,
     sourceIdeaId: sourceIdeaId || null,
     entryPoint: null,
+    versionType: null,
+    sourceModel: null,
   };
 
   renderEditor();
@@ -4015,6 +4040,8 @@ function openIdeaEditor({ ideaId = null } = {}) {
     sourceVersionId: null,
     sourceIdeaId: null,
     entryPoint: null,
+    versionType: null,
+    sourceModel: null,
   };
 
   if (!ideaId && entry?.id) {
@@ -4024,7 +4051,7 @@ function openIdeaEditor({ ideaId = null } = {}) {
   renderEditor();
 }
 
-function openVersionEditor({ speechId = null, versionId = null, entryPoint = null } = {}) {
+function openVersionEditor({ speechId = null, versionId = null, entryPoint = null, versionType = null, sourceModel = null } = {}) {
   const speech = speechId ? getSpeechById(speechId) : ensureSelection();
   if (!speech) return;
 
@@ -4049,6 +4076,8 @@ function openVersionEditor({ speechId = null, versionId = null, entryPoint = nul
     sourceVersionId: selectedVersion?.id || null,
     sourceIdeaId: null,
     entryPoint,
+    versionType,
+    sourceModel,
   };
 
   renderEditor();
@@ -4075,6 +4104,8 @@ function openDeliveryEditor({ speechId = null, deliveryId = null } = {}) {
     sourceVersionId: null,
     sourceIdeaId: null,
     entryPoint: null,
+    versionType: null,
+    sourceModel: null,
   };
 
   renderEditor();
@@ -4096,6 +4127,8 @@ function openPlaybookEditor({ playbookId = null } = {}) {
     sourceVersionId: null,
     sourceIdeaId: null,
     entryPoint: null,
+    versionType: null,
+    sourceModel: null,
   };
 
   if (!playbookId && entry?.id) {
@@ -4120,6 +4153,8 @@ function closeEditor() {
     sourceVersionId: null,
     sourceIdeaId: null,
     entryPoint: null,
+    versionType: null,
+    sourceModel: null,
   };
 
   elements.editorShell.dataset.layout = "";
@@ -4166,6 +4201,41 @@ function renderOptions(options, selectedValue) {
       ${escapeHtml(option.label)}
     </option>
   `).join("");
+}
+
+function getOptionLabel(options, value, fallback = "Other") {
+  return options.find((option) => option.value === value)?.label || fallback;
+}
+
+function getVersionTypeLabel(value) {
+  return getOptionLabel(VERSION_TYPE_OPTIONS, value || "standard", "Standard");
+}
+
+function getVersionSourceLabel(value) {
+  return getOptionLabel(VERSION_SOURCE_OPTIONS, value || "manual", "Manual");
+}
+
+function versionTypeOptions(selectedValue) {
+  return renderOptions(VERSION_TYPE_OPTIONS, selectedValue || "standard");
+}
+
+function versionSourceOptions(selectedValue) {
+  return renderOptions(VERSION_SOURCE_OPTIONS, selectedValue || "manual");
+}
+
+function renderVersionMetadataChips(version) {
+  if (!version) return "";
+
+  const chips = [];
+  if (version.versionType && version.versionType !== "standard") {
+    chips.push(`<span class="meta-chip version-meta-chip" data-version-type="${escapeHtml(version.versionType)}">${escapeHtml(getVersionTypeLabel(version.versionType))}</span>`);
+  }
+
+  if (version.sourceModel && version.sourceModel !== "manual") {
+    chips.push(`<span class="meta-chip version-meta-chip" data-source-model="${escapeHtml(version.sourceModel)}">${escapeHtml(getVersionSourceLabel(version.sourceModel))}</span>`);
+  }
+
+  return chips.join("");
 }
 
 function renderScriptTextSizeControl(label = "Script Text") {
@@ -4464,6 +4534,22 @@ function speechEditorConfig(speech) {
                 <label for="estimatedMinutesInput">Target Minutes</label>
                 <input id="estimatedMinutesInput" name="estimatedMinutes" type="number" min="0" step="1" value="${initialMinutes}">
               </div>
+              <div class="field">
+                <label for="versionTypeSelect">Version Type</label>
+                <select id="versionTypeSelect" name="versionType">
+                  ${versionTypeOptions(statusValue === "idea" ? "standard" : "raw")}
+                </select>
+              </div>
+              <div class="field">
+                <label for="sourceModelSelect">Source</label>
+                <select id="sourceModelSelect" name="sourceModel">
+                  ${versionSourceOptions("manual")}
+                </select>
+              </div>
+              <div class="field" data-span="full">
+                <label for="sourcePromptInput">Source Prompt</label>
+                <textarea id="sourcePromptInput" name="sourcePrompt" data-compact="true"></textarea>
+              </div>
               <div class="field" data-span="full">
                 <label for="revisionNoteInput">Revision Note</label>
                 <textarea id="revisionNoteInput" name="revisionNote" data-compact="true">${escapeHtml(initialRevisionNote)}</textarea>
@@ -4491,34 +4577,44 @@ function speechEditorConfig(speech) {
 
 function versionEditorConfig(speech, version) {
   const isEdit = state.editor.intent === "edit";
+  const isLlmRewrite = !isEdit && state.editor.entryPoint === "llm-rewrite";
   const sourceVersion = isEdit
     ? version
     : getVersionById(speech, state.editor.sourceVersionId) || getSelectedVersionForSpeech(speech);
+  const initialSourceModel = state.editor.sourceModel || (isLlmRewrite ? "chatgpt" : (sourceVersion?.sourceModel || "manual"));
+  const initialVersionType = state.editor.versionType || (isLlmRewrite ? "llm_rewrite" : (sourceVersion?.versionType || "standard"));
 
   const labelValue = isEdit
     ? version.label
-    : `${sourceVersion?.label || "Version"} Next`;
+    : (isLlmRewrite
+      ? `${getVersionSourceLabel(initialSourceModel)} Rewrite`
+      : `${sourceVersion?.label || "Version"} Next`);
   const revisionValue = isEdit
     ? version.revisionNote
-    : (sourceVersion?.revisionNote || "");
+    : (isLlmRewrite ? "External rewrite for harvesting stronger storytelling lines." : (sourceVersion?.revisionNote || ""));
   const bodyValue = isEdit
     ? version.speechBody
-    : (sourceVersion?.speechBody || "");
+    : (isLlmRewrite ? "" : (sourceVersion?.speechBody || ""));
   const bulletValue = isEdit
     ? linesToText(version.rehearsalBullets)
-    : linesToText(sourceVersion?.rehearsalBullets || []);
+    : (isLlmRewrite ? "" : linesToText(sourceVersion?.rehearsalBullets || []));
   const basedOnValue = isEdit ? (version.basedOn || "") : (sourceVersion?.id || "");
+  const sourcePromptValue = isEdit
+    ? (version.sourcePrompt || "")
+    : (isLlmRewrite ? "" : (sourceVersion?.sourcePrompt || ""));
 
   return {
     layout: "studio",
-    modeLabel: isEdit ? "Edit Script" : "New Version",
-    title: isEdit ? version.label : `New Version for ${speech.title}`,
+    modeLabel: isEdit ? "Edit Script" : (isLlmRewrite ? "Paste LLM Rewrite" : "New Version"),
+    title: isEdit ? version.label : (isLlmRewrite ? `Paste Rewrite for ${speech.title}` : `New Version for ${speech.title}`),
     context: `${speech.title} · ${speech.versions.length} versions in library`,
     footer: isEdit
       ? "Saving here updates the selected version and keeps it active."
-      : "New versions are created from the selected version and made active immediately.",
+      : (isLlmRewrite
+        ? "LLM rewrites are saved as versions with source metadata so you can compare and harvest strong lines later."
+        : "New versions are created from the selected version and made active immediately."),
     dismissLabel: "Back to Workspace",
-    saveLabel: isEdit ? "Save Version" : "Create Version",
+    saveLabel: isEdit ? "Save Version" : (isLlmRewrite ? "Save Rewrite" : "Create Version"),
     fields: `
       <div class="studio-layout">
         <div class="editor-card">
@@ -4538,11 +4634,27 @@ function versionEditorConfig(speech, version) {
               <label for="versionMinutesInput">Target Minutes</label>
               <input id="versionMinutesInput" name="estimatedMinutes" type="number" min="0" step="1" value="${escapeHtml(String(isEdit ? version.estimatedMinutes : (sourceVersion?.estimatedMinutes || "")))}">
             </div>
+            <div class="field">
+              <label for="versionTypeSelect">Version Type</label>
+              <select id="versionTypeSelect" name="versionType">
+                ${versionTypeOptions(isEdit ? version.versionType : initialVersionType)}
+              </select>
+            </div>
+            <div class="field">
+              <label for="sourceModelSelect">Source</label>
+              <select id="sourceModelSelect" name="sourceModel">
+                ${versionSourceOptions(isEdit ? version.sourceModel : initialSourceModel)}
+              </select>
+            </div>
             <div class="field" data-span="full">
               <label for="basedOnVersionSelect">Based On</label>
               <select id="basedOnVersionSelect" name="basedOn">
                 ${versionOptions(speech, basedOnValue, true, isEdit ? version.id : "")}
               </select>
+            </div>
+            <div class="field" data-span="full">
+              <label for="sourcePromptInput">Source Prompt</label>
+              <textarea id="sourcePromptInput" name="sourcePrompt" data-compact="true">${escapeHtml(sourcePromptValue)}</textarea>
             </div>
             <div class="field" data-span="full">
               <label for="versionRevisionInput">Revision Note</label>
@@ -4979,6 +5091,9 @@ async function saveSpeech(formData) {
         label: versionLabel,
         based_on_version_id: null,
         estimated_minutes: parseMinutes(formData.get("estimatedMinutes")),
+        version_type: cleanText(formData.get("versionType")) || (status === "idea" ? "standard" : "raw"),
+        source_model: cleanText(formData.get("sourceModel")) || "manual",
+        source_prompt: multilineText(formData.get("sourcePrompt")),
         revision_note: multilineText(formData.get("revisionNote")),
         speech_body: multilineText(formData.get("speechBody")),
         rehearsal_bullets: parseLineList(formData.get("rehearsalBullets")),
@@ -5039,6 +5154,7 @@ async function saveVersion(formData) {
   const speech = getSpeechById(state.editor.speechId);
   if (!speech) return;
   const returnToBullets = state.editor.entryPoint === "rehearsal-bullets";
+  const isLlmRewrite = state.editor.entryPoint === "llm-rewrite";
 
   const label = cleanText(formData.get("label"));
   if (!label) {
@@ -5048,6 +5164,9 @@ async function saveVersion(formData) {
 
   const basedOn = cleanText(formData.get("basedOn"));
   const estimatedMinutes = parseMinutes(formData.get("estimatedMinutes"));
+  const versionType = cleanText(formData.get("versionType")) || "standard";
+  const sourceModel = cleanText(formData.get("sourceModel")) || "manual";
+  const sourcePrompt = multilineText(formData.get("sourcePrompt"));
   const revisionNote = multilineText(formData.get("revisionNote"));
   const speechBody = multilineText(formData.get("speechBody"));
   const rehearsalBullets = parseLineList(formData.get("rehearsalBullets"));
@@ -5056,6 +5175,9 @@ async function saveVersion(formData) {
     label,
     based_on_version_id: basedOn || null,
     estimated_minutes: estimatedMinutes,
+    version_type: versionType,
+    source_model: sourceModel,
+    source_prompt: sourcePrompt,
     revision_note: revisionNote,
     speech_body: speechBody,
     rehearsal_bullets: rehearsalBullets,
@@ -5104,7 +5226,7 @@ async function saveVersion(formData) {
     if (returnToBullets) {
       scrollTabAnchorIntoView("rehearsal-bullets");
     }
-    setPageStatus(isEdit ? "Script saved." : "New version created.", "ok");
+    setPageStatus(isEdit ? "Script saved." : (isLlmRewrite ? "LLM rewrite saved." : "New version created."), "ok");
   } catch (error) {
     reportEditorError(error.message || "Could not save that version.");
   }
@@ -5781,6 +5903,7 @@ async function runAction(action) {
     "edit-version",
     "edit-version-bullets",
     "new-version",
+    "paste-llm-rewrite",
     "toggle-version-compare",
     "delete-version",
     "new-delivery",
@@ -5905,6 +6028,16 @@ async function runAction(action) {
 
   if (action === "new-version" && speech) {
     openVersionEditor({ speechId: speech.id });
+    return;
+  }
+
+  if (action === "paste-llm-rewrite" && speech) {
+    openVersionEditor({
+      speechId: speech.id,
+      entryPoint: "llm-rewrite",
+      versionType: "llm_rewrite",
+      sourceModel: "chatgpt",
+    });
     return;
   }
 

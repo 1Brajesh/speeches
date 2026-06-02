@@ -1722,6 +1722,31 @@
       background: rgba(123, 183, 255, 0.1);
     }
 
+    .document-shell .version-meta-chip[data-version-type="raw"] {
+      color: var(--gold);
+      border-color: rgba(242, 200, 118, 0.26);
+      background: rgba(242, 200, 118, 0.08);
+    }
+
+    .document-shell .version-meta-chip[data-version-type="llm_rewrite"],
+    .document-shell .version-meta-chip[data-source-model] {
+      color: var(--violet);
+      border-color: rgba(167, 144, 255, 0.24);
+      background: rgba(167, 144, 255, 0.08);
+    }
+
+    .document-shell .version-meta-chip[data-version-type="composite"] {
+      color: var(--green);
+      border-color: rgba(138, 208, 166, 0.28);
+      background: rgba(138, 208, 166, 0.1);
+    }
+
+    .document-shell .version-meta-chip[data-version-type="final"] {
+      color: #ffc1df;
+      border-color: rgba(255, 157, 204, 0.3);
+      background: rgba(255, 157, 204, 0.1);
+    }
+
     .document-shell .ghost-button,
     .document-shell .tab-pill {
       background: rgba(255, 255, 255, 0.05);
@@ -2999,6 +3024,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260529e"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260601a"></script>
 </body>
 </html>
