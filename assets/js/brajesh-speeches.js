@@ -120,6 +120,7 @@ let ideaDeleteBusy = false;
 let speechDeleteBusy = false;
 let versionDeleteBusy = false;
 let playbookDeleteBusy = false;
+let savedLineBusy = false;
 const speechDetailPromises = new Map();
 const speechDetailGenerations = new Map();
 let speechSearchTimer = null;
@@ -1433,6 +1434,7 @@ function mapSpeechSummaries(speechRows, versionRows, runRows) {
     }),
     versions: [],
     deliveries: [],
+    savedLines: [],
     detailLoaded: false,
     detailLoading: false,
     detailError: "",
@@ -1487,12 +1489,26 @@ function buildSpeechDeliveries(runRows) {
   }));
 }
 
-function applySpeechDetail(speechId, versionRows, runRows) {
+function buildSpeechSavedLines(savedLineRows) {
+  return (savedLineRows || []).map((row) => ({
+    id: row.id,
+    versionId: row.version_id || null,
+    text: row.text || "",
+    sourceModel: row.source_model || "manual",
+    note: row.note || "",
+    used: Boolean(row.used),
+    createdAt: row.created_at || "",
+    updatedAt: row.updated_at || row.created_at || "",
+  })).sort((a, b) => timestampMs(b.createdAt || b.updatedAt) - timestampMs(a.createdAt || a.updatedAt));
+}
+
+function applySpeechDetail(speechId, versionRows, runRows, savedLineRows = []) {
   const speech = getSpeechById(speechId);
   if (!speech) return null;
 
   speech.versions = buildSpeechVersions(versionRows);
   speech.deliveries = buildSpeechDeliveries(runRows);
+  speech.savedLines = buildSpeechSavedLines(savedLineRows);
   speech.versionCount = speech.versions.length;
   speech.deliveryCount = speech.deliveries.length;
 
@@ -1562,15 +1578,21 @@ async function loadSpeechDetail(speechId, options = {}) {
       .eq("speech_id", speechId)
       .order("delivered_at", { ascending: false })
       .order("created_at", { ascending: false }),
-  ]).then(([versionResult, runResult]) => {
+    db
+      .from("brajesh_speech_saved_lines")
+      .select("id, speech_id, version_id, text, source_model, note, used, created_at, updated_at")
+      .eq("speech_id", speechId)
+      .order("created_at", { ascending: false }),
+  ]).then(([versionResult, runResult, savedLineResult]) => {
     if (versionResult.error) throw versionResult.error;
     if (runResult.error) throw runResult.error;
+    if (savedLineResult.error) throw savedLineResult.error;
 
     if ((speechDetailGenerations.get(speechId) || 0) !== requestGeneration) {
       return getSpeechById(speechId);
     }
 
-    return applySpeechDetail(speechId, versionResult.data, runResult.data);
+    return applySpeechDetail(speechId, versionResult.data, runResult.data, savedLineResult.data);
   }).catch((error) => {
     if ((speechDetailGenerations.get(speechId) || 0) !== requestGeneration) {
       return getSpeechById(speechId);
@@ -2947,16 +2969,17 @@ async function fetchBackupRows(tableName) {
 }
 
 async function loadBackupContent() {
-  const [ideas, speeches, versions, runs, playbook, userSettings] = await Promise.all([
+  const [ideas, speeches, versions, runs, savedLines, playbook, userSettings] = await Promise.all([
     fetchBackupRows("brajesh_speech_ideas"),
     fetchBackupRows("brajesh_speeches"),
     fetchBackupRows("brajesh_speech_versions"),
     fetchBackupRows("brajesh_speech_runs"),
+    fetchBackupRows("brajesh_speech_saved_lines"),
     fetchBackupRows("brajesh_speech_playbook"),
     fetchBackupRows("brajesh_speech_user_settings"),
   ]);
 
-  return { ideas, speeches, versions, runs, playbook, userSettings };
+  return { ideas, speeches, versions, runs, savedLines, playbook, userSettings };
 }
 
 function backupLineList(value) {
@@ -2966,6 +2989,7 @@ function backupLineList(value) {
 function renderBackupMarkdown(content, exportedAt) {
   const versionsBySpeech = new Map();
   const runsBySpeech = new Map();
+  const savedLinesBySpeech = new Map();
   const lines = [
     "# Speeches Backup",
     "",
@@ -2986,6 +3010,12 @@ function renderBackupMarkdown(content, exportedAt) {
     const list = runsBySpeech.get(run.speech_id) || [];
     list.push(run);
     runsBySpeech.set(run.speech_id, list);
+  });
+
+  content.savedLines.forEach((savedLine) => {
+    const list = savedLinesBySpeech.get(savedLine.speech_id) || [];
+    list.push(savedLine);
+    savedLinesBySpeech.set(savedLine.speech_id, list);
   });
 
   [...content.speeches]
@@ -3026,6 +3056,18 @@ function renderBackupMarkdown(content, exportedAt) {
         });
         lines.push("");
       }
+
+      const speechSavedLines = (savedLinesBySpeech.get(speech.id) || [])
+        .sort((a, b) => timestampMs(b.created_at) - timestampMs(a.created_at));
+      if (speechSavedLines.length) {
+        lines.push("Saved lines:", "");
+        speechSavedLines.forEach((savedLine) => {
+          const source = savedLine.source_model || "manual";
+          const used = savedLine.used ? "used" : "unused";
+          lines.push(`- ${source} · ${used}: ${savedLine.text || ""}`);
+        });
+        lines.push("");
+      }
     });
 
   lines.push("## Ideas", "");
@@ -3062,6 +3104,7 @@ function createBackupFiles(content, timestamp) {
       speeches: content.speeches.length,
       versions: content.versions.length,
       runs: content.runs.length,
+      savedLines: content.savedLines.length,
       playbook: content.playbook.length,
       userSettings: content.userSettings.length,
     },
@@ -3077,6 +3120,7 @@ function createBackupFiles(content, timestamp) {
     { name: "speeches.json", content: JSON.stringify(content.speeches, null, 2), type: "application/json" },
     { name: "versions.json", content: JSON.stringify(content.versions, null, 2), type: "application/json" },
     { name: "runs.json", content: JSON.stringify(content.runs, null, 2), type: "application/json" },
+    { name: "saved-lines.json", content: JSON.stringify(content.savedLines, null, 2), type: "application/json" },
     { name: "playbook.json", content: JSON.stringify(content.playbook, null, 2), type: "application/json" },
     { name: "user-settings.json", content: JSON.stringify(content.userSettings, null, 2), type: "application/json" },
     { name: "README.txt", content: `Speeches backup ${timestamp}\n\nChoose the local-backups folder when using the Settings backup button.\ncontent.json contains all exported tables.\nspeeches.md is a readable copy of speeches, versions, bullets, runs, ideas, and playbook entries.\n`, type: "text/plain" },
@@ -3647,6 +3691,7 @@ function renderVersionsTab(speech) {
           <button class="ghost-button new-version-action-button" type="button" data-action="new-version">New Version</button>
           <button class="ghost-button" type="button" data-action="paste-llm-rewrite">Paste LLM Rewrite</button>
           <button class="ghost-button" type="button" data-action="start-teleprompter">Teleprompter</button>
+          <button class="ghost-button" type="button" data-action="save-selected-line">Save Line</button>
           <button class="script-button" type="button" data-action="edit-version">Edit Script</button>
           ${compareVersion
               ? `<button class="ghost-button" type="button" data-action="toggle-version-compare" aria-pressed="${String(compareOpen)}">${compareOpen ? "Hide Compare" : "Compare"}</button>`
@@ -3665,6 +3710,8 @@ function renderVersionsTab(speech) {
           <p class="body-copy" style="font-size: 1rem; font-family: var(--sans); line-height: 1.55;">${displayText(selectedVersion?.revisionNote, "No revision note.")}</p>
         </div>
       </div>
+
+      ${renderSavedLinesTray(speech)}
 
       ${compareOpen ? `
         <div class="card">
@@ -3735,6 +3782,66 @@ function renderVersionsTab(speech) {
           </div>
         </div>
       ` : ""}
+    </div>
+  `;
+}
+
+function getSavedLineVersionLabel(speech, savedLine) {
+  const version = getVersionById(speech, savedLine.versionId);
+  return version?.label || "Unknown version";
+}
+
+function renderSavedLineSourceChip(savedLine) {
+  const source = savedLine.sourceModel || "manual";
+  const label = getVersionSourceLabel(source);
+  return `<span class="meta-chip version-meta-chip" data-source-model="${escapeHtml(source)}">${displayText(label)}</span>`;
+}
+
+function renderSavedLineItem(speech, savedLine, options = {}) {
+  const compact = Boolean(options.compact);
+  return `
+    <div class="saved-line-item" data-used="${String(savedLine.used)}">
+      <p class="saved-line-text">${displayText(savedLine.text)}</p>
+      <div class="saved-line-meta">
+        ${renderSavedLineSourceChip(savedLine)}
+        <span class="meta-chip">${displayText(getSavedLineVersionLabel(speech, savedLine))}</span>
+        <span class="meta-chip">${savedLine.used ? "Used" : "Unused"}</span>
+        ${compact ? "" : `<span class="meta-chip">${displayText(formatDateTime(savedLine.createdAt))}</span>`}
+      </div>
+      <div class="saved-line-actions">
+        <button class="ghost-button" type="button" data-saved-line-action="copy" data-saved-line-id="${savedLine.id}">Copy</button>
+        ${compact ? "" : `<button class="ghost-button" type="button" data-saved-line-action="toggle-used" data-saved-line-id="${savedLine.id}">${savedLine.used ? "Mark Unused" : "Mark Used"}</button>`}
+        ${compact ? "" : `<button class="danger-button" type="button" data-saved-line-action="delete" data-saved-line-id="${savedLine.id}">Delete</button>`}
+      </div>
+    </div>
+  `;
+}
+
+function renderSavedLinesTray(speech, options = {}) {
+  const compact = Boolean(options.compact);
+  const savedLines = speech.savedLines || [];
+  const unusedCount = savedLines.filter((line) => !line.used).length;
+
+  return `
+    <div class="card saved-lines-card" data-compact="${String(compact)}">
+      <div class="panel-head">
+        <div>
+          <h4>Saved Lines</h4>
+          <p class="helper-copy">${compact ? "Copy strong lines back into your draft." : "Highlight a line from any version, then save it for the composite draft."}</p>
+        </div>
+        <div class="button-row">
+          <span class="meta-chip">${savedLines.length} saved</span>
+          <span class="meta-chip">${unusedCount} unused</span>
+          ${compact ? "" : `<button class="primary-button" type="button" data-action="save-selected-line">Save Line</button>`}
+        </div>
+      </div>
+      ${savedLines.length ? `
+        <div class="saved-line-list">
+          ${savedLines.map((savedLine) => renderSavedLineItem(speech, savedLine, { compact })).join("")}
+        </div>
+      ` : `
+        <div class="empty-state saved-lines-empty">No saved lines yet.</div>
+      `}
     </div>
   `;
 }
@@ -4664,6 +4771,8 @@ function versionEditorConfig(speech, version) {
         </div>
 
         ${renderPinnedPlaybookGuidance()}
+
+        ${renderSavedLinesTray(speech, { compact: true })}
 
         ${renderScriptComposer({
           heading: "Speech Body",
@@ -5640,6 +5749,154 @@ async function deleteVersion() {
   }
 }
 
+function getSelectedTextForSavedLine() {
+  const activeField = document.activeElement;
+  if (
+    activeField
+    && (activeField.tagName === "TEXTAREA" || activeField.tagName === "INPUT")
+    && (elements.tabContent.contains(activeField) || elements.editorShell.contains(activeField))
+    && typeof activeField.selectionStart === "number"
+    && typeof activeField.selectionEnd === "number"
+    && activeField.selectionEnd > activeField.selectionStart
+  ) {
+    return String(activeField.value || "")
+      .slice(activeField.selectionStart, activeField.selectionEnd)
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 4000);
+  }
+
+  const selection = window.getSelection();
+  const text = String(selection?.toString() || "").replace(/\s+/g, " ").trim();
+
+  if (!text || text.length < 2) {
+    return "";
+  }
+
+  const range = selection.rangeCount ? selection.getRangeAt(0) : null;
+  if (!range) return text;
+
+  const selectedNode = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+    ? range.commonAncestorContainer
+    : range.commonAncestorContainer.parentElement;
+
+  if (!elements.tabContent.contains(selectedNode) && !elements.editorShell.contains(selectedNode)) {
+    return "";
+  }
+
+  return text.slice(0, 4000);
+}
+
+async function saveSelectedLine() {
+  if (savedLineBusy) return;
+
+  const speech = ensureSelection();
+  const version = getSelectedVersionForSpeech(speech);
+  const text = getSelectedTextForSavedLine();
+
+  if (!speech || !version) return;
+
+  if (!text) {
+    setPageStatus("Highlight a line or paragraph first, then click Save Line.", "error");
+    return;
+  }
+
+  savedLineBusy = true;
+  setPageStatus("Saving line...");
+
+  try {
+    const { error } = await db
+      .from("brajesh_speech_saved_lines")
+      .insert({
+        speech_id: speech.id,
+        version_id: version.id,
+        text,
+        source_model: version.sourceModel || "manual",
+      });
+
+    if (error) throw error;
+
+    await loadSpeechDetail(speech.id, { force: true, renderAfter: false });
+    renderApp();
+    setPageStatus("Line saved.", "ok");
+  } catch (error) {
+    setPageStatus(error.message || "Could not save that line.", "error");
+  } finally {
+    savedLineBusy = false;
+  }
+}
+
+async function copySavedLine(savedLineId) {
+  const speech = ensureSelection();
+  const savedLine = speech?.savedLines?.find((line) => line.id === savedLineId);
+  if (!savedLine) return;
+
+  try {
+    await copyTextToClipboard(savedLine.text);
+    setPageStatus("Saved line copied.", "ok");
+  } catch (error) {
+    setPageStatus(error.message || "Could not copy that line.", "error");
+  }
+}
+
+async function toggleSavedLineUsed(savedLineId) {
+  if (savedLineBusy) return;
+
+  const speech = ensureSelection();
+  const savedLine = speech?.savedLines?.find((line) => line.id === savedLineId);
+  if (!speech || !savedLine) return;
+
+  savedLineBusy = true;
+
+  try {
+    const { error } = await db
+      .from("brajesh_speech_saved_lines")
+      .update({ used: !savedLine.used })
+      .eq("id", savedLine.id);
+
+    if (error) throw error;
+
+    await loadSpeechDetail(speech.id, { force: true, renderAfter: false });
+    renderApp();
+    setPageStatus(savedLine.used ? "Saved line marked unused." : "Saved line marked used.", "ok");
+  } catch (error) {
+    setPageStatus(error.message || "Could not update that saved line.", "error");
+  } finally {
+    savedLineBusy = false;
+  }
+}
+
+async function deleteSavedLine(savedLineId) {
+  if (savedLineBusy) return;
+
+  const speech = ensureSelection();
+  const savedLine = speech?.savedLines?.find((line) => line.id === savedLineId);
+  if (!speech || !savedLine) return;
+
+  if (!window.confirm("Delete this saved line?")) {
+    return;
+  }
+
+  savedLineBusy = true;
+
+  try {
+    const { error } = await db
+      .from("brajesh_speech_saved_lines")
+      .delete()
+      .eq("id", savedLine.id);
+
+    if (error) throw error;
+
+    await loadSpeechDetail(speech.id, { force: true, renderAfter: false });
+    renderApp();
+    setPageStatus("Saved line deleted.", "ok");
+  } catch (error) {
+    setPageStatus(error.message || "Could not delete that saved line.", "error");
+  } finally {
+    savedLineBusy = false;
+  }
+}
+
 function openRehearsal() {
   const speech = ensureSelection();
   const version = getSelectedVersionForSpeech(speech);
@@ -6065,6 +6322,11 @@ async function runAction(action) {
     return;
   }
 
+  if (action === "save-selected-line" && speech) {
+    await saveSelectedLine();
+    return;
+  }
+
   if (action === "delete-version" && speech) {
     deleteVersion();
     return;
@@ -6097,6 +6359,22 @@ async function runAction(action) {
 
   if (action === "delete-speech") {
     deleteSpeech();
+  }
+}
+
+function handleSavedLineAction(action, savedLineId) {
+  if (action === "copy") {
+    void copySavedLine(savedLineId);
+    return;
+  }
+
+  if (action === "toggle-used") {
+    void toggleSavedLineUsed(savedLineId);
+    return;
+  }
+
+  if (action === "delete") {
+    void deleteSavedLine(savedLineId);
   }
 }
 
@@ -6290,6 +6568,12 @@ elements.detailActionRow.addEventListener("click", (event) => {
 });
 
 elements.tabContent.addEventListener("click", (event) => {
+  const savedLineButton = event.target.closest("[data-saved-line-action]");
+  if (savedLineButton) {
+    handleSavedLineAction(savedLineButton.dataset.savedLineAction, savedLineButton.dataset.savedLineId);
+    return;
+  }
+
   const modeButton = event.target.closest("[data-rehearsal-mode]");
   if (modeButton) {
     setRehearsalMode(modeButton.dataset.rehearsalMode);
@@ -6307,6 +6591,29 @@ elements.tabContent.addEventListener("click", (event) => {
   if (deliveryButton) {
     state.selectedDeliveryId = deliveryButton.dataset.deliveryId;
     renderApp();
+    return;
+  }
+
+  const actionButton = event.target.closest("[data-action]");
+  if (actionButton) {
+    void runAction(actionButton.dataset.action);
+  }
+});
+
+function preserveSavedLineSelection(event) {
+  const saveLineButton = event.target.closest('[data-action="save-selected-line"]');
+  if (saveLineButton) {
+    event.preventDefault();
+  }
+}
+
+elements.tabContent.addEventListener("mousedown", preserveSavedLineSelection);
+elements.editorShell.addEventListener("mousedown", preserveSavedLineSelection);
+
+elements.editorShell.addEventListener("click", (event) => {
+  const savedLineButton = event.target.closest("[data-saved-line-action]");
+  if (savedLineButton) {
+    handleSavedLineAction(savedLineButton.dataset.savedLineAction, savedLineButton.dataset.savedLineId);
     return;
   }
 
