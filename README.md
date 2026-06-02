@@ -56,7 +56,7 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
   - title, idea note, tags, optional linked speech
 - `brajesh_speeches`
   - parent speech record
-  - title, status, goal, core idea, tags, notes, active version
+  - title, status, goal, core idea, tags, notes, active version, focus compare order
 - `brajesh_speech_versions`
   - one speech can have many versions
   - full script, revision note, target minutes, rehearsal bullets
@@ -123,6 +123,7 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
   - compare uses the version's authored base version first, and falls back to the previous version by time when no base version is set.
   - saved lines can be captured from selected version text and reused while editing later drafts.
   - `Focus Compare` opens a dedicated 2-3 column version comparison view with `Save Line` available from each source column.
+  - selected Focus Compare versions can be moved left/right, and the order is saved on the speech for reuse across devices.
   - the selected version can be deleted from the `Versions` detail header when the speech has more than one version.
   - `Edit Script` uses a collapsible `Rehearsal Bullets` panel.
   - `Edit Bullets` from the rehearsal view opens `Edit Script` directly to the expanded `Rehearsal Bullets` panel and returns to the rehearsal bullets section after save.
@@ -154,7 +155,7 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
 
 - Important: when speeches UI changes appear not to register after deploy, check for stale cached JS.
 - The speeches page currently cache-busts the module URL in `index.html`:
-  - `./assets/js/brajesh-speeches.js?v=20260602a`
+  - `./assets/js/brajesh-speeches.js?v=20260602b`
 - If future speeches JS changes appear missing in production, bump that query-string version.
 
 ## Useful Starting Point

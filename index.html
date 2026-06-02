@@ -1070,6 +1070,12 @@
       align-items: center;
     }
 
+    .version-focus-pill-shell {
+      display: inline-flex;
+      gap: 6px;
+      align-items: stretch;
+    }
+
     .version-focus-pill {
       min-height: 54px;
       display: inline-grid;
@@ -1082,13 +1088,18 @@
       background: rgba(255, 255, 255, 0.04);
     }
 
+    .version-focus-pill-shell[data-selected="true"] .version-focus-pill {
+      border-radius: 18px 12px 12px 18px;
+    }
+
     .version-focus-pill[aria-pressed="true"] {
       color: var(--navy);
       border-color: rgba(123, 183, 255, 0.34);
       background: rgba(123, 183, 255, 0.1);
     }
 
-    .version-focus-pill[disabled] {
+    .version-focus-pill[disabled],
+    .version-focus-order-button[disabled] {
       cursor: not-allowed;
     }
 
@@ -1100,6 +1111,24 @@
       color: currentColor;
       opacity: 0.7;
       font-size: 0.78rem;
+    }
+
+    .version-focus-order-controls {
+      display: grid;
+      grid-template-columns: repeat(2, 34px);
+      gap: 4px;
+      align-items: stretch;
+    }
+
+    .version-focus-order-button {
+      min-height: 54px;
+      padding: 0;
+      border-radius: 12px;
+      color: var(--navy);
+      border-color: rgba(123, 183, 255, 0.24);
+      background: rgba(123, 183, 255, 0.08);
+      font-size: 1rem;
+      font-weight: 800;
     }
 
     .version-focus-grid {
@@ -1647,6 +1676,12 @@
       color: #3f6f9c;
       border-color: rgba(123, 183, 255, 0.32);
       background: rgba(123, 183, 255, 0.14);
+    }
+
+    .document-shell .version-focus-order-button {
+      color: #3f6f9c;
+      border-color: rgba(123, 183, 255, 0.26);
+      background: rgba(123, 183, 255, 0.12);
     }
 
     .document-shell .panel-head h4,
@@ -3189,6 +3224,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260602a"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260602b"></script>
 </body>
 </html>

@@ -123,6 +123,8 @@ let speechDeleteBusy = false;
 let versionDeleteBusy = false;
 let playbookDeleteBusy = false;
 let savedLineBusy = false;
+let focusCompareSaveInFlight = false;
+let focusCompareSavePending = null;
 const speechDetailPromises = new Map();
 const speechDetailGenerations = new Map();
 let speechSearchTimer = null;
@@ -1423,6 +1425,7 @@ function mapSpeechSummaries(speechRows, versionRows, runRows) {
     tags: ensureTextArray(row.tags),
     notes: row.notes || "",
     activeVersionId: row.active_version_id || null,
+    focusCompareVersionIds: Array.isArray(row.focus_compare_version_ids) ? uniqueVersionIds(row.focus_compare_version_ids).slice(0, 3) : [],
     createdAt: row.created_at || "",
     updatedAt: row.updated_at || row.created_at || "",
     versionCount: versionCounts.get(row.id) || 0,
@@ -1759,7 +1762,7 @@ async function loadSpeeches(options = {}) {
       .order("updated_at", { ascending: false }),
     db
       .from("brajesh_speeches")
-      .select("id, title, status, goal, core_idea, tags, notes, active_version_id, created_at, updated_at")
+      .select("id, title, status, goal, core_idea, tags, notes, active_version_id, focus_compare_version_ids, created_at, updated_at")
       .order("updated_at", { ascending: false }),
     db
       .from("brajesh_speech_versions")
@@ -2302,6 +2305,12 @@ function uniqueVersionIds(ids) {
 
 function getDefaultFocusVersionIds(speech, selectedVersion) {
   if (!speech?.versions?.length) return [];
+
+  const savedIds = uniqueVersionIds(speech.focusCompareVersionIds)
+    .filter((id) => getVersionById(speech, id));
+  if (savedIds.length >= Math.min(2, speech.versions.length)) {
+    return savedIds.slice(0, 3);
+  }
 
   const compareReference = getCompareReferenceVersion(speech, selectedVersion);
   const orderedByUpdated = [...speech.versions]
@@ -3836,17 +3845,26 @@ function renderVersionFocusPicker(speech, focusVersions) {
       ${speech.versions.map((version) => {
         const selected = focusIds.has(version.id);
         const disabled = !selected && focusVersions.length >= 3;
+        const selectedIndex = focusVersions.findIndex((focusVersion) => focusVersion.id === version.id);
         return `
-          <button
-            class="version-focus-pill"
-            type="button"
-            data-focus-version-id="${version.id}"
-            aria-pressed="${String(selected)}"
-            ${disabled ? "disabled" : ""}
-          >
-            <span>${displayText(version.label)}</span>
-            <small>${versionWordCount(version)} words · ${version.estimatedMinutes || "-"} min</small>
-          </button>
+          <div class="version-focus-pill-shell" data-selected="${String(selected)}">
+            <button
+              class="version-focus-pill"
+              type="button"
+              data-focus-version-id="${version.id}"
+              aria-pressed="${String(selected)}"
+              ${disabled ? "disabled" : ""}
+            >
+              <span>${displayText(version.label)}</span>
+              <small>${versionWordCount(version)} words · ${version.estimatedMinutes || "-"} min</small>
+            </button>
+            ${selected ? `
+              <div class="version-focus-order-controls" aria-label="Move ${escapeHtml(version.label)}">
+                <button class="version-focus-order-button" type="button" data-focus-move-version-id="${version.id}" data-focus-move-direction="-1" aria-label="Move left" ${selectedIndex <= 0 ? "disabled" : ""}>←</button>
+                <button class="version-focus-order-button" type="button" data-focus-move-version-id="${version.id}" data-focus-move-direction="1" aria-label="Move right" ${selectedIndex >= focusVersions.length - 1 ? "disabled" : ""}>→</button>
+              </div>
+            ` : ""}
+          </div>
         `;
       }).join("")}
     </div>
@@ -6524,6 +6542,46 @@ function handleSavedLineAction(action, savedLineId) {
   }
 }
 
+async function flushFocusCompareOrderSave() {
+  if (focusCompareSaveInFlight || !focusCompareSavePending) return;
+
+  focusCompareSaveInFlight = true;
+
+  while (focusCompareSavePending) {
+    const { speechId, focusIds } = focusCompareSavePending;
+    focusCompareSavePending = null;
+    setPageStatus("Saving focus compare order...");
+
+    try {
+      const { error } = await db
+        .from("brajesh_speeches")
+        .update({ focus_compare_version_ids: focusIds })
+        .eq("id", speechId);
+
+      if (error) throw error;
+
+      setPageStatus("Focus compare order saved.", "ok");
+    } catch (error) {
+      setPageStatus(error.message || "Could not save focus compare order.", "error");
+    }
+  }
+
+  focusCompareSaveInFlight = false;
+}
+
+function saveFocusCompareOrder(speech, focusIds) {
+  if (!speech) return;
+
+  const nextIds = uniqueVersionIds(focusIds)
+    .filter((id) => getVersionById(speech, id))
+    .slice(0, 3);
+
+  speech.focusCompareVersionIds = nextIds;
+  state.versionFocusIds = nextIds;
+  focusCompareSavePending = { speechId: speech.id, focusIds: nextIds };
+  void flushFocusCompareOrderSave();
+}
+
 function toggleFocusVersion(versionId) {
   const speech = ensureSelection();
   if (!speech || !versionId) return;
@@ -6543,8 +6601,30 @@ function toggleFocusVersion(versionId) {
     focusIds.push(versionId);
   }
 
+  speech.focusCompareVersionIds = focusIds;
   state.versionFocusIds = focusIds;
   renderApp();
+  void saveFocusCompareOrder(speech, focusIds);
+}
+
+function moveFocusVersion(versionId, direction) {
+  const speech = ensureSelection();
+  if (!speech || !versionId) return;
+
+  const focusIds = getFocusCompareVersions(speech, getSelectedVersionForSpeech(speech))
+    .map((version) => version.id);
+  const index = focusIds.indexOf(versionId);
+  const nextIndex = index + direction;
+
+  if (index < 0 || nextIndex < 0 || nextIndex >= focusIds.length) {
+    return;
+  }
+
+  [focusIds[index], focusIds[nextIndex]] = [focusIds[nextIndex], focusIds[index]];
+  speech.focusCompareVersionIds = focusIds;
+  state.versionFocusIds = focusIds;
+  renderApp();
+  void saveFocusCompareOrder(speech, focusIds);
 }
 
 function nextRehearsalBullet() {
@@ -6740,6 +6820,12 @@ elements.tabContent.addEventListener("click", (event) => {
   const savedLineButton = event.target.closest("[data-saved-line-action]");
   if (savedLineButton) {
     handleSavedLineAction(savedLineButton.dataset.savedLineAction, savedLineButton.dataset.savedLineId);
+    return;
+  }
+
+  const focusMoveButton = event.target.closest("[data-focus-move-version-id]");
+  if (focusMoveButton) {
+    moveFocusVersion(focusMoveButton.dataset.focusMoveVersionId, Number(focusMoveButton.dataset.focusMoveDirection));
     return;
   }
 
