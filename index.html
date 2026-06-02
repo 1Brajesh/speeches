@@ -1071,8 +1071,8 @@
     }
 
     .version-focus-pill-shell {
+      position: relative;
       display: inline-flex;
-      gap: 6px;
       align-items: stretch;
     }
 
@@ -1081,15 +1081,11 @@
       display: inline-grid;
       gap: 2px;
       align-content: center;
-      padding: 8px 14px;
+      padding: 8px 18px;
       border-radius: 18px;
       text-align: left;
       color: var(--muted);
       background: rgba(255, 255, 255, 0.04);
-    }
-
-    .version-focus-pill-shell[data-selected="true"] .version-focus-pill {
-      border-radius: 18px 12px 12px 18px;
     }
 
     .version-focus-pill[aria-pressed="true"] {
@@ -1099,7 +1095,7 @@
     }
 
     .version-focus-pill[disabled],
-    .version-focus-order-button[disabled] {
+    .version-focus-edge-button[disabled] {
       cursor: not-allowed;
     }
 
@@ -1113,22 +1109,57 @@
       font-size: 0.78rem;
     }
 
-    .version-focus-order-controls {
-      display: grid;
-      grid-template-columns: repeat(2, 34px);
-      gap: 4px;
-      align-items: stretch;
+    .version-focus-edge-button {
+      position: absolute;
+      top: 2px;
+      bottom: 2px;
+      width: 28%;
+      min-height: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 16px;
+      background: transparent;
+      color: transparent;
+      box-shadow: none;
     }
 
-    .version-focus-order-button {
-      min-height: 54px;
-      padding: 0;
-      border-radius: 12px;
+    .version-focus-edge-button[data-focus-move-direction="-1"] {
+      left: 2px;
+    }
+
+    .version-focus-edge-button[data-focus-move-direction="1"] {
+      right: 2px;
+    }
+
+    .version-focus-edge-button:not([disabled]):hover,
+    .version-focus-edge-button:not([disabled]):focus-visible {
+      background: rgba(123, 183, 255, 0.1);
+      box-shadow: none;
+    }
+
+    .version-focus-edge-button::after {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
       color: var(--navy);
-      border-color: rgba(123, 183, 255, 0.24);
-      background: rgba(123, 183, 255, 0.08);
-      font-size: 1rem;
       font-weight: 800;
+      opacity: 0;
+      transition: opacity 140ms ease;
+    }
+
+    .version-focus-edge-button[data-focus-move-direction="-1"]::after {
+      content: "‹";
+      left: 8px;
+    }
+
+    .version-focus-edge-button[data-focus-move-direction="1"]::after {
+      content: "›";
+      right: 8px;
+    }
+
+    .version-focus-edge-button:not([disabled]):hover::after,
+    .version-focus-edge-button:not([disabled]):focus-visible::after {
+      opacity: 0.72;
     }
 
     .version-focus-grid {
@@ -1678,9 +1709,12 @@
       background: rgba(123, 183, 255, 0.14);
     }
 
-    .document-shell .version-focus-order-button {
+    .document-shell .version-focus-edge-button::after {
       color: #3f6f9c;
-      border-color: rgba(123, 183, 255, 0.26);
+    }
+
+    .document-shell .version-focus-edge-button:not([disabled]):hover,
+    .document-shell .version-focus-edge-button:not([disabled]):focus-visible {
       background: rgba(123, 183, 255, 0.12);
     }
 
@@ -3224,6 +3258,6 @@
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260602b"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260602c"></script>
 </body>
 </html>

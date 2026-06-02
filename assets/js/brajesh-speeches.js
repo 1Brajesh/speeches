@@ -3847,7 +3847,7 @@ function renderVersionFocusPicker(speech, focusVersions) {
         const disabled = !selected && focusVersions.length >= 3;
         const selectedIndex = focusVersions.findIndex((focusVersion) => focusVersion.id === version.id);
         return `
-          <div class="version-focus-pill-shell" data-selected="${String(selected)}">
+          <div class="version-focus-pill-shell" data-selected="${String(selected)}" data-edge-controls="${String(selected)}">
             <button
               class="version-focus-pill"
               type="button"
@@ -3859,10 +3859,8 @@ function renderVersionFocusPicker(speech, focusVersions) {
               <small>${versionWordCount(version)} words · ${version.estimatedMinutes || "-"} min</small>
             </button>
             ${selected ? `
-              <div class="version-focus-order-controls" aria-label="Move ${escapeHtml(version.label)}">
-                <button class="version-focus-order-button" type="button" data-focus-move-version-id="${version.id}" data-focus-move-direction="-1" aria-label="Move left" ${selectedIndex <= 0 ? "disabled" : ""}>←</button>
-                <button class="version-focus-order-button" type="button" data-focus-move-version-id="${version.id}" data-focus-move-direction="1" aria-label="Move right" ${selectedIndex >= focusVersions.length - 1 ? "disabled" : ""}>→</button>
-              </div>
+              <button class="version-focus-edge-button" type="button" data-focus-move-version-id="${version.id}" data-focus-move-direction="-1" aria-label="Move ${escapeHtml(version.label)} left" ${selectedIndex <= 0 ? "disabled" : ""}></button>
+              <button class="version-focus-edge-button" type="button" data-focus-move-version-id="${version.id}" data-focus-move-direction="1" aria-label="Move ${escapeHtml(version.label)} right" ${selectedIndex >= focusVersions.length - 1 ? "disabled" : ""}></button>
             ` : ""}
           </div>
         `;
