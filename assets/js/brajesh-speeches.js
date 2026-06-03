@@ -3928,8 +3928,8 @@ function renderVersionFocusColumn(version) {
         <div class="button-row version-focus-target-actions">
           ${showTargetPicker ? `<button class="primary-button" type="button" data-focus-target-version-id="${version.id}">Use as Target</button>` : ""}
           ${isTarget ? `
-            <span class="meta-chip">${insertState.dirty ? "Unsaved edits" : "Target"}</span>
-            <button class="primary-button" type="button" data-action="save-focus-target" ${insertState.dirty && !insertState.saving ? "" : "disabled"}>${insertState.saving ? "Saving..." : "Save Target"}</button>
+            <span class="meta-chip" data-focus-target-status>${insertState.dirty ? "Unsaved edits" : "Target"}</span>
+            <button class="primary-button" type="button" data-action="save-focus-target" data-focus-target-save ${insertState.dirty && !insertState.saving ? "" : "disabled"}>${insertState.saving ? "Saving..." : "Save Target"}</button>
             <button class="ghost-button" type="button" data-action="clear-focus-target">Change Target</button>
           ` : ""}
         </div>
@@ -6156,6 +6156,21 @@ function formatFocusInsertionValue(value, start, end, insertedText) {
   };
 }
 
+function syncFocusTargetControls() {
+  const saveButton = elements.tabContent.querySelector("[data-focus-target-save]");
+  const statusChip = elements.tabContent.querySelector("[data-focus-target-status]");
+  const canSave = state.versionFocusInsert.dirty && !state.versionFocusInsert.saving;
+
+  if (saveButton) {
+    saveButton.disabled = !canSave;
+    saveButton.textContent = state.versionFocusInsert.saving ? "Saving..." : "Save Target";
+  }
+
+  if (statusChip) {
+    statusChip.textContent = state.versionFocusInsert.dirty ? "Unsaved edits" : "Target";
+  }
+}
+
 function insertPendingTextIntoFocusTarget(textarea) {
   const pendingText = state.versionFocusInsert.pendingText;
   if (!pendingText || !textarea) return;
@@ -6171,6 +6186,7 @@ function insertPendingTextIntoFocusTarget(textarea) {
   state.versionFocusInsert.targetDraft = insertion.value;
   state.versionFocusInsert.dirty = true;
   clearFocusPendingInsert();
+  syncFocusTargetControls();
   setPageStatus("Inserted into target draft. Save Target when ready.", "ok");
   scheduleFocusSavedLinesFit();
 }
@@ -7507,6 +7523,7 @@ elements.tabContent.addEventListener("input", (event) => {
 
   state.versionFocusInsert.targetDraft = focusTargetEditor.value;
   state.versionFocusInsert.dirty = true;
+  syncFocusTargetControls();
   scheduleFocusSavedLinesFit();
 });
 
