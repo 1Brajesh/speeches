@@ -173,6 +173,7 @@
     .tab-pill,
     .ghost-button,
     .meta-button,
+    .quick-edit-button,
     .script-button,
     .primary-button,
     .danger-button {
@@ -187,6 +188,7 @@
     .tab-pill,
     .ghost-button,
     .meta-button,
+    .quick-edit-button,
     .script-button {
       background: rgba(255, 255, 255, 0.05);
       color: var(--muted);
@@ -197,6 +199,7 @@
     .tab-pill:hover,
     .ghost-button:hover,
     .meta-button:hover,
+    .quick-edit-button:hover,
     .script-button:hover,
     .primary-button:hover,
     .danger-button:hover,
@@ -205,6 +208,7 @@
     .tab-pill:focus-visible,
     .ghost-button:focus-visible,
     .meta-button:focus-visible,
+    .quick-edit-button:focus-visible,
     .script-button:focus-visible,
     .primary-button:focus-visible,
     .danger-button:focus-visible {
@@ -237,6 +241,13 @@
       color: #ffc1df;
       background: linear-gradient(180deg, rgba(255, 157, 204, 0.24), rgba(255, 157, 204, 0.12));
       border-color: rgba(255, 157, 204, 0.32);
+      font-weight: 700;
+    }
+
+    .quick-edit-button {
+      color: var(--gold);
+      background: linear-gradient(180deg, rgba(242, 200, 118, 0.24), rgba(242, 200, 118, 0.12));
+      border-color: rgba(242, 200, 118, 0.32);
       font-weight: 700;
     }
 
@@ -995,7 +1006,7 @@
       font-size: var(--script-text-size);
       line-height: var(--script-line-height);
       white-space: pre-wrap;
-      overflow: auto;
+      overflow: hidden;
     }
 
     .quick-script-editor:focus {
@@ -1005,6 +1016,20 @@
 
     .saved-lines-card[data-compact="true"] {
       align-self: start;
+    }
+
+    .saved-lines-card[data-collapsible="true"] {
+      padding: 0;
+    }
+
+    .saved-lines-card[data-collapsible="true"] .collapse-summary {
+      border-radius: 22px;
+      border-bottom: 0;
+    }
+
+    .saved-lines-card[data-collapsible="true"][open] .collapse-summary {
+      border-bottom: 1px solid var(--line);
+      border-radius: 22px 22px 0 0;
     }
 
     .saved-line-list {
@@ -1506,7 +1531,41 @@
       gap: 10px;
     }
 
+    .playbook-guidance-card summary {
+      position: relative;
+      list-style: none;
+      display: grid;
+      gap: 8px;
+      padding-right: 40px;
+      cursor: pointer;
+    }
+
+    .playbook-guidance-card summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .playbook-guidance-card summary::after {
+      content: "+";
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 28px;
+      height: 28px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 999px;
+      color: var(--green);
+      background: rgba(138, 208, 166, 0.08);
+      border: 1px solid rgba(138, 208, 166, 0.18);
+      font-weight: 800;
+    }
+
+    .playbook-guidance-card[open] summary::after {
+      content: "−";
+    }
+
     .playbook-guidance-principle {
+      margin-top: 4px;
       line-height: 1.55;
     }
 
@@ -1831,6 +1890,7 @@
 
     .document-shell .ghost-button,
     .document-shell .meta-button,
+    .document-shell .quick-edit-button,
     .document-shell .script-button,
     .document-shell .primary-button,
     .document-shell .danger-button {
@@ -1842,11 +1902,13 @@
 
     .document-shell .ghost-button:hover,
     .document-shell .meta-button:hover,
+    .document-shell .quick-edit-button:hover,
     .document-shell .script-button:hover,
     .document-shell .primary-button:hover,
     .document-shell .danger-button:hover,
     .document-shell .ghost-button:focus-visible,
     .document-shell .meta-button:focus-visible,
+    .document-shell .quick-edit-button:focus-visible,
     .document-shell .script-button:focus-visible,
     .document-shell .primary-button:focus-visible,
     .document-shell .danger-button:focus-visible {
@@ -1863,6 +1925,12 @@
       color: #8e365d;
       background: rgba(202, 109, 144, 0.12);
       border-color: rgba(202, 109, 144, 0.2);
+    }
+
+    .document-shell .quick-edit-button {
+      color: #815b16;
+      background: rgba(201, 151, 44, 0.16);
+      border-color: rgba(201, 151, 44, 0.26);
     }
 
     .document-shell .script-button {
@@ -3529,6 +3597,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260603d"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260603e"></script>
 </body>
 </html>

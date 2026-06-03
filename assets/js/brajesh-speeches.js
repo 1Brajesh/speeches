@@ -720,6 +720,7 @@ function setScriptTextSize(value) {
   }
   queueUserSettingsSave();
   scheduleAutoSizeRichTextareas(elements.editorShell, { preserveScrollContainer });
+  scheduleAutoSizeQuickScriptEditors(elements.tabContent);
 }
 
 function setScriptLineHeight(value) {
@@ -735,6 +736,7 @@ function setScriptLineHeight(value) {
   }
   queueUserSettingsSave();
   scheduleAutoSizeRichTextareas(elements.editorShell, { preserveScrollContainer });
+  scheduleAutoSizeQuickScriptEditors(elements.tabContent);
 }
 
 function setScriptParagraphSpacing(value) {
@@ -780,6 +782,37 @@ function autoSizeRichTextareas(root = document) {
   });
 }
 
+function autoSizeQuickScriptEditor(textarea, options = {}) {
+  const { allowShrink = true } = options;
+
+  if (!(textarea instanceof HTMLTextAreaElement) || !textarea.hasAttribute("data-quick-script-editor")) {
+    return;
+  }
+
+  const computedStyle = window.getComputedStyle(textarea);
+  const minHeight = Number.parseFloat(computedStyle.minHeight) || 0;
+  const borderOffset = (Number.parseFloat(computedStyle.borderTopWidth) || 0)
+    + (Number.parseFloat(computedStyle.borderBottomWidth) || 0);
+  const currentHeight = Number.parseFloat(textarea.style.height) || textarea.getBoundingClientRect().height || 0;
+
+  if (allowShrink) {
+    textarea.style.height = "auto";
+  }
+
+  const nextHeight = Math.max(minHeight, textarea.scrollHeight + borderOffset);
+  if (!allowShrink && nextHeight <= currentHeight + 1) {
+    return;
+  }
+
+  textarea.style.height = `${nextHeight}px`;
+}
+
+function autoSizeQuickScriptEditors(root = document, options = {}) {
+  root.querySelectorAll("textarea[data-quick-script-editor]").forEach((textarea) => {
+    autoSizeQuickScriptEditor(textarea, options);
+  });
+}
+
 function scheduleAutoSizeRichTextareas(root = document, options = {}) {
   const { preserveScrollContainer = null } = options;
   window.requestAnimationFrame(() => {
@@ -791,6 +824,12 @@ function scheduleAutoSizeRichTextareas(root = document, options = {}) {
       preserveScrollContainer.scrollTop = scrollTop;
       preserveScrollContainer.scrollLeft = scrollLeft;
     }
+  });
+}
+
+function scheduleAutoSizeQuickScriptEditors(root = document, options = {}) {
+  window.requestAnimationFrame(() => {
+    autoSizeQuickScriptEditors(root, options);
   });
 }
 
@@ -3694,7 +3733,7 @@ function renderOverviewTab(speech) {
           ${quickEditing ? `
             <button class="primary-button" type="button" data-action="save-quick-script-edit" data-quick-script-save ${state.quickScriptEdit.dirty && !state.quickScriptEdit.saving ? "" : "disabled"}>${state.quickScriptEdit.saving ? "Saving..." : "Save"}</button>
             <button class="ghost-button" type="button" data-action="cancel-quick-script-edit">Cancel</button>
-          ` : `<button class="ghost-button" type="button" data-action="start-quick-script-edit">Edit Here</button>`}
+          ` : `<button class="quick-edit-button" type="button" data-action="start-quick-script-edit">Edit Here</button>`}
           <button class="script-button" type="button" data-action="edit-version">Edit Script</button>
         </div>
       </div>
@@ -3780,7 +3819,7 @@ function renderVersionsTab(speech) {
             <span class="meta-chip" data-quick-script-status>${state.quickScriptEdit.dirty ? "Unsaved edits" : "Editing here"}</span>
             <button class="primary-button" type="button" data-action="save-quick-script-edit" data-quick-script-save ${state.quickScriptEdit.dirty && !state.quickScriptEdit.saving ? "" : "disabled"}>${state.quickScriptEdit.saving ? "Saving..." : "Save"}</button>
             <button class="ghost-button" type="button" data-action="cancel-quick-script-edit">Cancel</button>
-          ` : `<button class="ghost-button" type="button" data-action="start-quick-script-edit">Edit Here</button>`}
+          ` : `<button class="quick-edit-button" type="button" data-action="start-quick-script-edit">Edit Here</button>`}
           <button class="script-button" type="button" data-action="edit-version">Edit Script</button>
           ${speech.versions.length > 1
               ? `<button class="ghost-button" type="button" data-action="open-version-focus">Focus Compare</button>`
@@ -4043,8 +4082,37 @@ function renderSavedLineItem(speech, savedLine, options = {}) {
 function renderSavedLinesTray(speech, options = {}) {
   const compact = Boolean(options.compact);
   const drawer = Boolean(options.drawer);
+  const collapsible = Boolean(options.collapsible);
   const savedLines = speech.savedLines || [];
   const unusedCount = savedLines.filter((line) => !line.used).length;
+  const listMarkup = savedLines.length ? `
+    <div class="saved-line-list">
+      ${savedLines.map((savedLine) => renderSavedLineItem(speech, savedLine, { compact })).join("")}
+    </div>
+  ` : `
+    <div class="empty-state saved-lines-empty">No saved lines yet.</div>
+  `;
+
+  if (collapsible) {
+    return `
+      <details class="card saved-lines-card" data-compact="${String(compact)}" data-drawer="${String(drawer)}" data-collapsible="true">
+        <summary class="collapse-summary">
+          <div>
+            <h4>Saved Lines</h4>
+            <p class="collapse-summary-copy">Copy strong lines back into your draft when needed.</p>
+          </div>
+          <div class="collapse-summary-meta">
+            <span class="meta-chip">${savedLines.length} saved</span>
+            <span class="meta-chip">${unusedCount} unused</span>
+            <span class="meta-chip">Expand</span>
+          </div>
+        </summary>
+        <div class="collapse-content">
+          ${listMarkup}
+        </div>
+      </details>
+    `;
+  }
 
   return `
     <div class="card saved-lines-card" data-compact="${String(compact)}" data-drawer="${String(drawer)}">
@@ -4060,13 +4128,7 @@ function renderSavedLinesTray(speech, options = {}) {
           ${compact || drawer ? "" : `<button class="primary-button" type="button" data-action="save-selected-line">Save Line</button>`}
         </div>
       </div>
-      ${savedLines.length ? `
-        <div class="saved-line-list">
-          ${savedLines.map((savedLine) => renderSavedLineItem(speech, savedLine, { compact })).join("")}
-        </div>
-      ` : `
-        <div class="empty-state saved-lines-empty">No saved lines yet.</div>
-      `}
+      ${listMarkup}
     </div>
   `;
 }
@@ -4727,15 +4789,17 @@ function renderPinnedPlaybookGuidance() {
       </div>
       <div class="playbook-guidance-grid">
         ${pinnedEntries.map((entry) => `
-          <div class="playbook-guidance-card">
-            <div class="meta-row">
-              <span class="status-chip" data-status="pinned">Pinned</span>
-              <span class="meta-chip">${displayText(entry.category || "Uncategorized")}</span>
-            </div>
-            <strong>${displayText(entry.title)}</strong>
+          <details class="playbook-guidance-card">
+            <summary>
+              <div class="meta-row">
+                <span class="status-chip" data-status="pinned">Pinned</span>
+                <span class="meta-chip">${displayText(entry.category || "Uncategorized")}</span>
+              </div>
+              <strong>${displayText(entry.title)}</strong>
+            </summary>
             <p class="playbook-guidance-principle">${displayText(entry.principle)}</p>
             <p class="helper-copy">${displayText(excerpt(entry.whyItWorks || "Use this as a writing constraint while shaping the arc, tone, and emotional movement.", 150))}</p>
-          </div>
+          </details>
         `).join("")}
       </div>
     </div>
@@ -5067,7 +5131,7 @@ function versionEditorConfig(speech, version) {
 
         ${renderPinnedPlaybookGuidance()}
 
-        ${renderSavedLinesTray(speech, { compact: true })}
+        ${renderSavedLinesTray(speech, { compact: true, collapsible: true })}
 
         ${renderScriptComposer({
           heading: "Speech Body",
@@ -7382,6 +7446,7 @@ function renderApp() {
   }
   syncAllScriptPreferenceControls(elements.tabContent);
   syncSettingsStatus(elements.tabContent);
+  scheduleAutoSizeQuickScriptEditors(elements.tabContent);
   scheduleSelectionBubbleSync();
   scheduleFocusSavedLinesFit();
 }
@@ -7705,6 +7770,7 @@ elements.tabContent.addEventListener("input", (event) => {
 
   state.quickScriptEdit.draft = quickScriptEditor.value;
   state.quickScriptEdit.dirty = true;
+  autoSizeQuickScriptEditor(quickScriptEditor, { allowShrink: true });
   syncQuickScriptEditControls();
 });
 
