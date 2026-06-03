@@ -75,6 +75,12 @@ const state = {
     dirty: false,
     saving: false,
   },
+  quickScriptEdit: {
+    versionId: null,
+    draft: "",
+    dirty: false,
+    saving: false,
+  },
   tab: "overview",
   rehearsal: {
     speechId: null,
@@ -3624,6 +3630,7 @@ function renderTabContent(speech) {
 
 function renderOverviewTab(speech) {
   const version = getSelectedVersionForSpeech(speech);
+  const quickEditing = Boolean(version?.id && state.quickScriptEdit.versionId === version.id);
 
   if (speech.status === "idea") {
     const prompts = version?.rehearsalBullets || [];
@@ -3682,7 +3689,12 @@ function renderOverviewTab(speech) {
         <h4>Speech Body</h4>
         <div class="button-row">
           <span class="meta-chip">${version?.label || "No version"}</span>
+          ${quickEditing ? `<span class="meta-chip" data-quick-script-status>${state.quickScriptEdit.dirty ? "Unsaved edits" : "Editing here"}</span>` : ""}
           <button class="ghost-button" type="button" data-action="start-teleprompter">Teleprompter</button>
+          ${quickEditing ? `
+            <button class="primary-button" type="button" data-action="save-quick-script-edit" data-quick-script-save ${state.quickScriptEdit.dirty && !state.quickScriptEdit.saving ? "" : "disabled"}>${state.quickScriptEdit.saving ? "Saving..." : "Save"}</button>
+            <button class="ghost-button" type="button" data-action="cancel-quick-script-edit">Cancel</button>
+          ` : `<button class="ghost-button" type="button" data-action="start-quick-script-edit">Edit Here</button>`}
           <button class="script-button" type="button" data-action="edit-version">Edit Script</button>
         </div>
       </div>
@@ -3691,9 +3703,7 @@ function renderOverviewTab(speech) {
         <span class="metric-chip">${speechWordCount(speech)} words</span>
         <span class="metric-chip">${version?.rehearsalBullets?.length || 0} rehearsal bullets</span>
       </div>
-      <div class="script-box">
-        ${renderScriptBodyText(version?.speechBody, "No speech body yet.")}
-      </div>
+      ${renderQuickScriptBody(version)}
     </div>
   `;
 }
@@ -3711,6 +3721,7 @@ function renderVersionsTab(speech) {
   const editTimestampLabel = selectedVersion ? `Last edited ${formatDateTime(selectedVersion.updatedAt)}` : "No version selected";
   const compareOpen = Boolean(state.versionCompareOpen && selectedVersion && compareVersion);
   const compareData = compareOpen ? buildVersionScriptCompare(compareVersion, selectedVersion) : null;
+  const quickEditing = Boolean(selectedVersion?.id && state.quickScriptEdit.versionId === selectedVersion.id);
   const wordDelta = selectedVersion && compareVersion
     ? versionWordCount(selectedVersion) - versionWordCount(compareVersion)
     : 0;
@@ -3765,6 +3776,11 @@ function renderVersionsTab(speech) {
           <button class="ghost-button" type="button" data-action="paste-llm-rewrite">Paste LLM Rewrite</button>
           <button class="ghost-button" type="button" data-action="start-teleprompter">Teleprompter</button>
           <button class="ghost-button" type="button" data-action="save-selected-line">Save Line</button>
+          ${quickEditing ? `
+            <span class="meta-chip" data-quick-script-status>${state.quickScriptEdit.dirty ? "Unsaved edits" : "Editing here"}</span>
+            <button class="primary-button" type="button" data-action="save-quick-script-edit" data-quick-script-save ${state.quickScriptEdit.dirty && !state.quickScriptEdit.saving ? "" : "disabled"}>${state.quickScriptEdit.saving ? "Saving..." : "Save"}</button>
+            <button class="ghost-button" type="button" data-action="cancel-quick-script-edit">Cancel</button>
+          ` : `<button class="ghost-button" type="button" data-action="start-quick-script-edit">Edit Here</button>`}
           <button class="script-button" type="button" data-action="edit-version">Edit Script</button>
           ${speech.versions.length > 1
               ? `<button class="ghost-button" type="button" data-action="open-version-focus">Focus Compare</button>`
@@ -3775,9 +3791,7 @@ function renderVersionsTab(speech) {
             ${canDeleteVersion ? '<button class="danger-button" type="button" data-action="delete-version">Delete Version</button>' : '<span class="meta-chip">Keep at least 1 version</span>'}
           </div>
         </div>
-        <div class="script-box version-script-box" data-save-line-version-id="${selectedVersion?.id || ""}" style="margin-bottom: 14px;">
-          ${renderScriptBodyText(selectedVersion?.speechBody, "No speech body yet.")}
-        </div>
+        ${renderQuickScriptBody(selectedVersion, "version-script-box")}
         <div class="notes-box">
           <div class="panel-head">
             <h4>Revision Note</h4>
@@ -6102,6 +6116,106 @@ function hasUnsavedFocusTargetEdits() {
   return isFocusCompareActive() && state.versionFocusInsert.dirty;
 }
 
+function resetQuickScriptEdit() {
+  state.quickScriptEdit.versionId = null;
+  state.quickScriptEdit.draft = "";
+  state.quickScriptEdit.dirty = false;
+  state.quickScriptEdit.saving = false;
+}
+
+function hasUnsavedQuickScriptEdit() {
+  return Boolean(state.quickScriptEdit.versionId && state.quickScriptEdit.dirty);
+}
+
+function confirmDiscardInlineEdits() {
+  if (!hasUnsavedFocusTargetEdits() && !hasUnsavedQuickScriptEdit()) return true;
+  return window.confirm("Discard unsaved script edits?");
+}
+
+function startQuickScriptEdit(versionId) {
+  const speech = ensureSelection();
+  const version = getVersionById(speech, versionId);
+  if (!speech || !version) return;
+
+  if (state.quickScriptEdit.versionId !== version.id && !confirmDiscardInlineEdits()) {
+    return;
+  }
+
+  state.quickScriptEdit.versionId = version.id;
+  state.quickScriptEdit.draft = version.speechBody || "";
+  state.quickScriptEdit.dirty = false;
+  state.quickScriptEdit.saving = false;
+  renderApp();
+}
+
+function syncQuickScriptEditControls() {
+  const saveButton = elements.tabContent.querySelector("[data-quick-script-save]");
+  const statusChip = elements.tabContent.querySelector("[data-quick-script-status]");
+  const canSave = state.quickScriptEdit.dirty && !state.quickScriptEdit.saving;
+
+  if (saveButton) {
+    saveButton.disabled = !canSave;
+    saveButton.textContent = state.quickScriptEdit.saving ? "Saving..." : "Save";
+  }
+
+  if (statusChip) {
+    statusChip.textContent = state.quickScriptEdit.dirty ? "Unsaved edits" : "Editing here";
+  }
+}
+
+async function saveQuickScriptEdit() {
+  const speech = ensureSelection();
+  const version = getVersionById(speech, state.quickScriptEdit.versionId);
+  if (!speech || !version || state.quickScriptEdit.saving) return;
+
+  const draft = multilineText(state.quickScriptEdit.draft);
+  state.quickScriptEdit.saving = true;
+  syncQuickScriptEditControls();
+  setPageStatus("Saving script...");
+
+  try {
+    const { error } = await db
+      .from("brajesh_speech_versions")
+      .update({ speech_body: draft })
+      .eq("id", version.id);
+
+    if (error) throw error;
+
+    version.speechBody = draft;
+    version.updatedAt = new Date().toISOString();
+    resetQuickScriptEdit();
+    setPageStatus("Script saved.", "ok");
+    renderApp();
+  } catch (error) {
+    state.quickScriptEdit.saving = false;
+    setPageStatus(error.message || "Could not save script.", "error");
+    syncQuickScriptEditControls();
+  }
+}
+
+function renderQuickScriptBody(version, className = "") {
+  const isEditing = Boolean(version?.id && state.quickScriptEdit.versionId === version.id);
+  const classAttribute = ["script-box", className].filter(Boolean).join(" ");
+
+  if (!isEditing) {
+    return `
+      <div class="${classAttribute}" data-save-line-version-id="${version?.id || ""}">
+        ${renderScriptBodyText(version?.speechBody, "No speech body yet.")}
+      </div>
+    `;
+  }
+
+  const draft = state.quickScriptEdit.draft;
+  return `
+    <textarea
+      class="${classAttribute} quick-script-editor"
+      data-quick-script-editor
+      data-save-line-version-id="${version.id}"
+      spellcheck="true"
+    >${escapeHtml(draft)}</textarea>
+  `;
+}
+
 function startFocusPendingInsert() {
   const selectedLine = getSelectedLineSelection();
 
@@ -6765,7 +6879,7 @@ function renderRehearsalScreen(options = {}) {
 async function selectSpeech(speechId, options = {}) {
   const { renderPending = true } = options;
 
-  if (state.selectedSpeechId !== speechId && hasUnsavedFocusTargetEdits() && !confirmDiscardFocusTargetEdits()) {
+  if (state.selectedSpeechId !== speechId && !confirmDiscardInlineEdits()) {
     return;
   }
 
@@ -6775,6 +6889,7 @@ async function selectSpeech(speechId, options = {}) {
   state.versionFocusOpen = false;
   state.versionFocusIds = [];
   resetFocusInsertState();
+  resetQuickScriptEdit();
   renderApp();
 
   try {
@@ -6831,30 +6946,39 @@ async function runAction(action) {
   }
 
   if (action === "new-speech") {
+    if (!confirmDiscardInlineEdits()) return;
+    resetQuickScriptEdit();
     state.workspaceView = "speeches";
     openSpeechEditor({ statusPreset: "draft" });
     return;
   }
 
   if (action === "show-ideas") {
+    if (!confirmDiscardInlineEdits()) return;
+    resetQuickScriptEdit();
     state.workspaceView = "ideas";
     renderApp();
     return;
   }
 
   if (action === "show-speeches") {
+    if (!confirmDiscardInlineEdits()) return;
     state.workspaceView = "speeches";
     renderApp();
     return;
   }
 
   if (action === "show-playbook") {
+    if (!confirmDiscardInlineEdits()) return;
+    resetQuickScriptEdit();
     state.workspaceView = "playbook";
     renderApp();
     return;
   }
 
   if (action === "show-settings") {
+    if (!confirmDiscardInlineEdits()) return;
+    resetQuickScriptEdit();
     state.workspaceView = "settings";
     renderApp();
     return;
@@ -6899,11 +7023,15 @@ async function runAction(action) {
   }
 
   if (action === "edit-speech" && speech) {
+    if (!confirmDiscardInlineEdits()) return;
+    resetQuickScriptEdit();
     openSpeechEditor({ speechId: speech.id });
     return;
   }
 
   if (action === "edit-version" && speech) {
+    if (!confirmDiscardInlineEdits()) return;
+    resetQuickScriptEdit();
     openVersionEditor({
       speechId: speech.id,
       versionId: getSelectedVersionForSpeech(speech)?.id || null,
@@ -6911,7 +7039,26 @@ async function runAction(action) {
     return;
   }
 
+  if (action === "start-quick-script-edit" && speech) {
+    startQuickScriptEdit(getSelectedVersionForSpeech(speech)?.id || null);
+    return;
+  }
+
+  if (action === "cancel-quick-script-edit" && speech) {
+    if (!confirmDiscardInlineEdits()) return;
+    resetQuickScriptEdit();
+    renderApp();
+    return;
+  }
+
+  if (action === "save-quick-script-edit" && speech) {
+    await saveQuickScriptEdit();
+    return;
+  }
+
   if (action === "edit-version-bullets" && speech) {
+    if (!confirmDiscardInlineEdits()) return;
+    resetQuickScriptEdit();
     openVersionEditor({
       speechId: speech.id,
       versionId: getSelectedVersionForSpeech(speech)?.id || null,
@@ -6921,11 +7068,15 @@ async function runAction(action) {
   }
 
   if (action === "new-version" && speech) {
+    if (!confirmDiscardInlineEdits()) return;
+    resetQuickScriptEdit();
     openVersionEditor({ speechId: speech.id });
     return;
   }
 
   if (action === "paste-llm-rewrite" && speech) {
+    if (!confirmDiscardInlineEdits()) return;
+    resetQuickScriptEdit();
     openVersionEditor({
       speechId: speech.id,
       entryPoint: "llm-rewrite",
@@ -6954,17 +7105,21 @@ async function runAction(action) {
   }
 
   if (action === "toggle-version-compare" && speech) {
+    if (!confirmDiscardInlineEdits()) return;
+    resetQuickScriptEdit();
     state.versionCompareOpen = !state.versionCompareOpen;
     renderApp();
     return;
   }
 
   if (action === "open-version-focus" && speech) {
+    if (!confirmDiscardInlineEdits()) return;
     const selectedVersion = getSelectedVersionForSpeech(speech);
     state.versionFocusOpen = true;
     state.versionCompareOpen = false;
     state.versionFocusIds = getDefaultFocusVersionIds(speech, selectedVersion);
     state.versionFocusSavedLinesOpen = false;
+    resetQuickScriptEdit();
     resetFocusInsertState();
     renderApp();
     return;
@@ -7020,16 +7175,22 @@ async function runAction(action) {
   }
 
   if (action === "delete-version" && speech) {
+    if (!confirmDiscardInlineEdits()) return;
+    resetQuickScriptEdit();
     deleteVersion();
     return;
   }
 
   if (action === "new-delivery" && speech) {
+    if (!confirmDiscardInlineEdits()) return;
+    resetQuickScriptEdit();
     openDeliveryEditor({ speechId: speech.id });
     return;
   }
 
   if (action === "edit-delivery" && speech) {
+    if (!confirmDiscardInlineEdits()) return;
+    resetQuickScriptEdit();
     const delivery = getSelectedDeliveryForSpeech(speech);
     if (delivery) {
       openDeliveryEditor({ speechId: speech.id, deliveryId: delivery.id });
@@ -7040,16 +7201,20 @@ async function runAction(action) {
   }
 
   if (action === "start-rehearsal") {
+    if (!confirmDiscardInlineEdits()) return;
     openRehearsal();
     return;
   }
 
   if (action === "start-teleprompter") {
+    if (!confirmDiscardInlineEdits()) return;
     openTeleprompter();
     return;
   }
 
   if (action === "delete-speech") {
+    if (!confirmDiscardInlineEdits()) return;
+    resetQuickScriptEdit();
     deleteSpeech();
   }
 }
@@ -7346,12 +7511,13 @@ elements.tabBar.addEventListener("click", (event) => {
   const button = event.target.closest("[data-tab]");
   if (!button) return;
 
-  if (state.tab !== button.dataset.tab && hasUnsavedFocusTargetEdits() && !confirmDiscardFocusTargetEdits()) {
+  if (state.tab !== button.dataset.tab && !confirmDiscardInlineEdits()) {
     return;
   }
 
   if (state.tab !== button.dataset.tab) {
     resetFocusInsertState();
+    resetQuickScriptEdit();
   }
   state.tab = button.dataset.tab;
   renderApp();
@@ -7403,6 +7569,12 @@ elements.tabContent.addEventListener("click", (event) => {
 
   const versionButton = event.target.closest("[data-version-id]");
   if (versionButton) {
+    if (state.selectedVersionId !== versionButton.dataset.versionId) {
+      if (!confirmDiscardInlineEdits()) {
+        return;
+      }
+      resetQuickScriptEdit();
+    }
     state.selectedVersionId = versionButton.dataset.versionId;
     renderApp();
     return;
@@ -7468,7 +7640,7 @@ window.addEventListener("resize", scheduleSelectionBubbleSync);
 window.addEventListener("resize", scheduleFocusSavedLinesFit);
 window.visualViewport?.addEventListener("resize", scheduleFocusSavedLinesFit);
 window.addEventListener("beforeunload", (event) => {
-  if (!hasUnsavedFocusTargetEdits()) return;
+  if (!hasUnsavedFocusTargetEdits() && !hasUnsavedQuickScriptEdit()) return;
 
   event.preventDefault();
   event.returnValue = "";
@@ -7525,6 +7697,15 @@ elements.tabContent.addEventListener("input", (event) => {
   state.versionFocusInsert.dirty = true;
   syncFocusTargetControls();
   scheduleFocusSavedLinesFit();
+});
+
+elements.tabContent.addEventListener("input", (event) => {
+  const quickScriptEditor = event.target.closest("[data-quick-script-editor]");
+  if (!quickScriptEditor) return;
+
+  state.quickScriptEdit.draft = quickScriptEditor.value;
+  state.quickScriptEdit.dirty = true;
+  syncQuickScriptEditControls();
 });
 
 elements.editorBackdrop.addEventListener("click", () => {

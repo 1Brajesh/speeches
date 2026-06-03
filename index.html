@@ -978,6 +978,23 @@
 
     .version-script-box {
       min-height: min(58vh, 420px);
+      margin-bottom: 14px;
+    }
+
+    .quick-script-editor {
+      width: 100%;
+      resize: vertical;
+      color: var(--text);
+      outline: none;
+      font-family: var(--serif);
+      font-size: var(--script-text-size);
+      line-height: var(--script-line-height);
+      white-space: pre-wrap;
+    }
+
+    .quick-script-editor:focus {
+      border-color: rgba(138, 208, 166, 0.42);
+      box-shadow: 0 0 0 3px rgba(138, 208, 166, 0.08);
     }
 
     .saved-lines-card[data-compact="true"] {
@@ -3506,6 +3523,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260603b"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260603c"></script>
 </body>
 </html>
