@@ -976,20 +976,26 @@
       gap: var(--script-paragraph-gap);
     }
 
+    .quick-script-surface {
+      min-height: min(64vh, 680px);
+    }
+
     .version-script-box {
-      min-height: min(58vh, 420px);
+      min-height: min(64vh, 680px);
       margin-bottom: 14px;
     }
 
     .quick-script-editor {
       width: 100%;
-      resize: vertical;
+      min-height: min(64vh, 680px);
+      resize: none;
       color: var(--text);
       outline: none;
       font-family: var(--serif);
       font-size: var(--script-text-size);
       line-height: var(--script-line-height);
       white-space: pre-wrap;
+      overflow: auto;
     }
 
     .quick-script-editor:focus {
@@ -3523,6 +3529,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260603c"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260603d"></script>
 </body>
 </html>

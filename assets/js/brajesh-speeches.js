@@ -6195,7 +6195,7 @@ async function saveQuickScriptEdit() {
 
 function renderQuickScriptBody(version, className = "") {
   const isEditing = Boolean(version?.id && state.quickScriptEdit.versionId === version.id);
-  const classAttribute = ["script-box", className].filter(Boolean).join(" ");
+  const classAttribute = ["script-box", "quick-script-surface", className].filter(Boolean).join(" ");
 
   if (!isEditing) {
     return `
@@ -6354,7 +6354,7 @@ function placeSelectionBubbleInAlternateColumn(bubble, selectionDetails, dimensi
   const columnRect = alternateColumn.getBoundingClientRect();
   const sourceRect = selectionDetails.sourceColumn.getBoundingClientRect();
   if (columnRect.width <= 0 || columnRect.height <= 0) return false;
-  if (columnRect.bottom < 0 || columnRect.top > window.innerHeight) return false;
+  if (columnRect.right < 0 || columnRect.left > window.innerWidth) return false;
   if (Math.abs(columnRect.left - sourceRect.left) < 8) return false;
 
   const viewportPadding = 8;
