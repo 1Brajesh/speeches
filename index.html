@@ -1376,6 +1376,11 @@
         rgba(255, 255, 255, 0.018);
     }
 
+    .version-focus-column[data-focus-target="true"] {
+      border-color: rgba(138, 208, 166, 0.34);
+      box-shadow: inset 0 0 0 1px rgba(138, 208, 166, 0.08);
+    }
+
     .version-focus-column-head {
       display: grid;
       gap: 10px;
@@ -1388,6 +1393,22 @@
 
     .version-focus-script {
       min-height: min(74vh, 760px);
+    }
+
+    .version-focus-target-editor {
+      width: 100%;
+      resize: vertical;
+      color: var(--text);
+      outline: none;
+      font-family: var(--serif);
+      font-size: var(--script-text-size);
+      line-height: var(--script-line-height);
+      white-space: pre-wrap;
+    }
+
+    .version-focus-target-editor:focus {
+      border-color: rgba(138, 208, 166, 0.42);
+      box-shadow: 0 0 0 3px rgba(138, 208, 166, 0.08);
     }
 
     .compare-segment-list {
@@ -3481,9 +3502,10 @@
   <div class="selection-bubble" id="selectionBubble" hidden>
     <button class="ghost-button" type="button" data-selection-bubble-action="copy">Copy</button>
     <button class="primary-button" type="button" data-selection-bubble-action="save">Save</button>
+    <button class="primary-button" type="button" data-selection-bubble-action="insert">Insert</button>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260602n"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260603a"></script>
 </body>
 </html>

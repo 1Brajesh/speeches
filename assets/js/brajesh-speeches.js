@@ -67,6 +67,14 @@ const state = {
   versionFocusOpen: false,
   versionFocusIds: [],
   versionFocusSavedLinesOpen: false,
+  versionFocusInsert: {
+    pendingText: "",
+    sourceVersionId: null,
+    targetVersionId: null,
+    targetDraft: "",
+    dirty: false,
+    saving: false,
+  },
   tab: "overview",
   rehearsal: {
     speechId: null,
@@ -3885,13 +3893,31 @@ function renderVersionFocusPicker(speech, focusVersions) {
   `;
 }
 
+function getFocusTargetDraft(version) {
+  if (state.versionFocusInsert.targetVersionId !== version.id) {
+    return version.speechBody || "";
+  }
+
+  return state.versionFocusInsert.dirty
+    ? state.versionFocusInsert.targetDraft
+    : (state.versionFocusInsert.targetDraft || version.speechBody || "");
+}
+
 function renderVersionFocusColumn(version) {
+  const insertState = state.versionFocusInsert;
+  const isTarget = insertState.targetVersionId === version.id;
+  const hasPendingInsert = Boolean(insertState.pendingText);
+  const showTargetPicker = hasPendingInsert && !insertState.targetVersionId;
+  const targetDraft = getFocusTargetDraft(version);
+
   return `
-    <article class="version-focus-column" data-save-line-version-id="${version.id}">
+    <article class="version-focus-column" data-save-line-version-id="${version.id}" data-focus-target="${String(isTarget)}">
       <div class="version-focus-column-head">
         <div>
           <h4>${displayText(version.label)}</h4>
-          <p class="helper-copy">${displayText(`Last edited ${formatDateTime(version.updatedAt)}`)}</p>
+          <p class="helper-copy">${isTarget
+            ? displayText(hasPendingInsert ? "Target draft. Tap where the clip should go." : "Target draft is editable.")
+            : displayText(`Last edited ${formatDateTime(version.updatedAt)}`)}</p>
         </div>
         <div class="saved-line-meta">
           ${renderVersionMetadataChips(version)}
@@ -3899,10 +3925,27 @@ function renderVersionFocusColumn(version) {
           <span class="meta-chip">${version.estimatedMinutes || "-"} min</span>
           <span class="meta-chip">${version.rehearsalBullets.length} bullets</span>
         </div>
+        <div class="button-row version-focus-target-actions">
+          ${showTargetPicker ? `<button class="primary-button" type="button" data-focus-target-version-id="${version.id}">Use as Target</button>` : ""}
+          ${isTarget ? `
+            <span class="meta-chip">${insertState.dirty ? "Unsaved edits" : "Target"}</span>
+            <button class="primary-button" type="button" data-action="save-focus-target" ${insertState.dirty && !insertState.saving ? "" : "disabled"}>${insertState.saving ? "Saving..." : "Save Target"}</button>
+            <button class="ghost-button" type="button" data-action="clear-focus-target">Change Target</button>
+          ` : ""}
+        </div>
       </div>
-      <div class="script-box version-focus-script">
-        ${renderScriptBodyText(version.speechBody, "No speech body yet.")}
-      </div>
+      ${isTarget ? `
+        <textarea
+          class="script-box version-focus-script version-focus-target-editor"
+          data-focus-target-editor
+          data-focus-target-version-id="${version.id}"
+          spellcheck="true"
+        >${escapeHtml(targetDraft)}</textarea>
+      ` : `
+        <div class="script-box version-focus-script">
+          ${renderScriptBodyText(version.speechBody, "No speech body yet.")}
+        </div>
+      `}
     </article>
   `;
 }
@@ -3910,6 +3953,7 @@ function renderVersionFocusColumn(version) {
 function renderVersionFocusCompare(speech, selectedVersion) {
   const focusVersions = getFocusCompareVersions(speech, selectedVersion);
   const canCompare = speech.versions.length > 1 && focusVersions.length >= 2;
+  const insertState = state.versionFocusInsert;
 
   return `
     <div class="reader-stack">
@@ -3920,9 +3964,12 @@ function renderVersionFocusCompare(speech, selectedVersion) {
               <div>
                 <h4>Focus Compare</h4>
                 <p class="version-focus-title">${displayText(speech.title)}</p>
-                <p class="helper-copy">Pick 2 or 3 versions. Highlight text in any column, then save it as a line from that source version.</p>
+                <p class="helper-copy">${insertState.pendingText
+                  ? displayText(insertState.targetVersionId ? "Tap where to insert in the target draft." : "Choose a target version for the clipped text.")
+                  : "Pick 2 or 3 versions. Highlight text in any column, then save or insert it."}</p>
               </div>
               <div class="button-row">
+                ${insertState.pendingText ? `<span class="meta-chip">Insert pending</span><button class="ghost-button" type="button" data-action="cancel-focus-insert">Cancel Insert</button>` : ""}
                 <span class="meta-chip">${focusVersions.length} selected</span>
                 <button class="ghost-button" type="button" data-action="close-version-focus">Back to Version Detail</button>
               </div>
@@ -6032,6 +6079,102 @@ function hideSelectionBubble() {
   elements.selectionBubble.removeAttribute("data-placement");
 }
 
+function clearFocusPendingInsert() {
+  state.versionFocusInsert.pendingText = "";
+  state.versionFocusInsert.sourceVersionId = null;
+}
+
+function resetFocusInsertState() {
+  state.versionFocusInsert.pendingText = "";
+  state.versionFocusInsert.sourceVersionId = null;
+  state.versionFocusInsert.targetVersionId = null;
+  state.versionFocusInsert.targetDraft = "";
+  state.versionFocusInsert.dirty = false;
+  state.versionFocusInsert.saving = false;
+}
+
+function confirmDiscardFocusTargetEdits() {
+  if (!state.versionFocusInsert.dirty) return true;
+  return window.confirm("Discard unsaved target edits?");
+}
+
+function hasUnsavedFocusTargetEdits() {
+  return isFocusCompareActive() && state.versionFocusInsert.dirty;
+}
+
+function startFocusPendingInsert() {
+  const selectedLine = getSelectedLineSelection();
+
+  if (!selectedLine.text) {
+    setPageStatus("Highlight a line or paragraph first, then click Insert.", "error");
+    return;
+  }
+
+  state.versionFocusInsert.pendingText = selectedLine.text;
+  state.versionFocusInsert.sourceVersionId = selectedLine.versionId;
+  hideSelectionBubble();
+
+  if (state.versionFocusInsert.targetVersionId) {
+    setPageStatus("Tap where to insert in the target draft.", "ok");
+    renderApp();
+    return;
+  }
+
+  setPageStatus("Choose a target version, then tap where to insert.", "ok");
+  renderApp();
+}
+
+function chooseFocusInsertTarget(versionId) {
+  const speech = ensureSelection();
+  const version = getVersionById(speech, versionId);
+  if (!speech || !version) return;
+
+  if (state.versionFocusInsert.targetVersionId !== version.id && !confirmDiscardFocusTargetEdits()) {
+    return;
+  }
+
+  state.versionFocusInsert.targetVersionId = version.id;
+  state.versionFocusInsert.targetDraft = version.speechBody || "";
+  state.versionFocusInsert.dirty = false;
+  state.versionFocusInsert.saving = false;
+  setPageStatus(state.versionFocusInsert.pendingText ? "Tap where to insert in the target draft." : `${version.label} is now the target.`, "ok");
+  renderApp();
+}
+
+function formatFocusInsertionValue(value, start, end, insertedText) {
+  const before = String(value || "").slice(0, start).replace(/\s+$/, "");
+  const after = String(value || "").slice(end).replace(/^\s+/, "");
+  const clip = String(insertedText || "").trim();
+  const prefix = before ? "\n\n" : "";
+  const suffix = after ? "\n\n" : "";
+  const nextValue = `${before}${prefix}${clip}${suffix}${after}`;
+  const cursorStart = before.length + prefix.length;
+
+  return {
+    value: nextValue,
+    cursor: cursorStart + clip.length,
+  };
+}
+
+function insertPendingTextIntoFocusTarget(textarea) {
+  const pendingText = state.versionFocusInsert.pendingText;
+  if (!pendingText || !textarea) return;
+
+  const start = Number.isFinite(textarea.selectionStart) ? textarea.selectionStart : textarea.value.length;
+  const end = Number.isFinite(textarea.selectionEnd) ? textarea.selectionEnd : start;
+  const insertion = formatFocusInsertionValue(textarea.value, start, end, pendingText);
+
+  textarea.value = insertion.value;
+  textarea.selectionStart = insertion.cursor;
+  textarea.selectionEnd = insertion.cursor;
+  textarea.focus();
+  state.versionFocusInsert.targetDraft = insertion.value;
+  state.versionFocusInsert.dirty = true;
+  clearFocusPendingInsert();
+  setPageStatus("Inserted into target draft. Save Target when ready.", "ok");
+  scheduleFocusSavedLinesFit();
+}
+
 function getFocusSelectionDetails() {
   if (!isFocusCompareActive()) return null;
 
@@ -6243,6 +6386,40 @@ async function copySelectedLine() {
     setPageStatus("Highlight copied.", "ok");
   } catch (error) {
     setPageStatus(error.message || "Could not copy that highlight.", "error");
+  }
+}
+
+async function saveFocusTargetDraft() {
+  const speech = ensureSelection();
+  const targetVersionId = state.versionFocusInsert.targetVersionId;
+  const version = getVersionById(speech, targetVersionId);
+
+  if (!speech || !version || state.versionFocusInsert.saving) return;
+
+  const targetDraft = multilineText(state.versionFocusInsert.targetDraft);
+  state.versionFocusInsert.saving = true;
+  setPageStatus("Saving target draft...");
+  renderApp();
+
+  try {
+    const { error } = await db
+      .from("brajesh_speech_versions")
+      .update({ speech_body: targetDraft })
+      .eq("id", version.id);
+
+    if (error) throw error;
+
+    version.speechBody = targetDraft;
+    version.updatedAt = new Date().toISOString();
+    state.versionFocusInsert.targetDraft = targetDraft;
+    state.versionFocusInsert.dirty = false;
+    state.versionFocusInsert.saving = false;
+    setPageStatus("Target draft saved.", "ok");
+    renderApp();
+  } catch (error) {
+    state.versionFocusInsert.saving = false;
+    setPageStatus(error.message || "Could not save target draft.", "error");
+    renderApp();
   }
 }
 
@@ -6572,11 +6749,16 @@ function renderRehearsalScreen(options = {}) {
 async function selectSpeech(speechId, options = {}) {
   const { renderPending = true } = options;
 
+  if (state.selectedSpeechId !== speechId && hasUnsavedFocusTargetEdits() && !confirmDiscardFocusTargetEdits()) {
+    return;
+  }
+
   state.selectedSpeechId = speechId;
   state.selectedVersionId = null;
   state.selectedDeliveryId = null;
   state.versionFocusOpen = false;
   state.versionFocusIds = [];
+  resetFocusInsertState();
   renderApp();
 
   try {
@@ -6767,13 +6949,16 @@ async function runAction(action) {
     state.versionCompareOpen = false;
     state.versionFocusIds = getDefaultFocusVersionIds(speech, selectedVersion);
     state.versionFocusSavedLinesOpen = false;
+    resetFocusInsertState();
     renderApp();
     return;
   }
 
   if (action === "close-version-focus" && speech) {
+    if (!confirmDiscardFocusTargetEdits()) return;
     state.versionFocusOpen = false;
     state.versionFocusSavedLinesOpen = false;
+    resetFocusInsertState();
     renderApp();
     return;
   }
@@ -6783,6 +6968,28 @@ async function runAction(action) {
     if (!renderFocusSavedLinesDrawer(speech)) {
       renderApp();
     }
+    return;
+  }
+
+  if (action === "cancel-focus-insert" && speech) {
+    clearFocusPendingInsert();
+    setPageStatus("Insert canceled.");
+    renderApp();
+    return;
+  }
+
+  if (action === "clear-focus-target" && speech) {
+    if (!confirmDiscardFocusTargetEdits()) return;
+    state.versionFocusInsert.targetVersionId = null;
+    state.versionFocusInsert.targetDraft = "";
+    state.versionFocusInsert.dirty = false;
+    setPageStatus(state.versionFocusInsert.pendingText ? "Choose a target version." : "Target cleared.");
+    renderApp();
+    return;
+  }
+
+  if (action === "save-focus-target" && speech) {
+    await saveFocusTargetDraft();
     return;
   }
 
@@ -6899,6 +7106,13 @@ function toggleFocusVersion(versionId) {
     if (focusIds.length <= 2) {
       setPageStatus("Focus Compare needs at least two versions.", "error");
       return;
+    }
+
+    if (versionId === state.versionFocusInsert.targetVersionId) {
+      if (!confirmDiscardFocusTargetEdits()) return;
+      state.versionFocusInsert.targetVersionId = null;
+      state.versionFocusInsert.targetDraft = "";
+      state.versionFocusInsert.dirty = false;
     }
 
     focusIds.splice(existingIndex, 1);
@@ -7116,6 +7330,13 @@ elements.tabBar.addEventListener("click", (event) => {
   const button = event.target.closest("[data-tab]");
   if (!button) return;
 
+  if (state.tab !== button.dataset.tab && hasUnsavedFocusTargetEdits() && !confirmDiscardFocusTargetEdits()) {
+    return;
+  }
+
+  if (state.tab !== button.dataset.tab) {
+    resetFocusInsertState();
+  }
   state.tab = button.dataset.tab;
   renderApp();
 });
@@ -7137,6 +7358,18 @@ elements.tabContent.addEventListener("click", (event) => {
   const focusMoveButton = event.target.closest("[data-focus-move-version-id]");
   if (focusMoveButton) {
     moveFocusVersion(focusMoveButton.dataset.focusMoveVersionId, Number(focusMoveButton.dataset.focusMoveDirection));
+    return;
+  }
+
+  const focusTargetButton = event.target.closest("[data-focus-target-version-id]");
+  if (focusTargetButton && !focusTargetButton.matches("[data-focus-target-editor]")) {
+    chooseFocusInsertTarget(focusTargetButton.dataset.focusTargetVersionId);
+    return;
+  }
+
+  const focusTargetEditor = event.target.closest("[data-focus-target-editor]");
+  if (focusTargetEditor && state.versionFocusInsert.pendingText) {
+    window.setTimeout(() => insertPendingTextIntoFocusTarget(focusTargetEditor), 0);
     return;
   }
 
@@ -7204,6 +7437,11 @@ if (elements.selectionBubble) {
 
     if (button.dataset.selectionBubbleAction === "copy") {
       void copySelectedLine().then(hideSelectionBubble);
+      return;
+    }
+
+    if (button.dataset.selectionBubbleAction === "insert") {
+      startFocusPendingInsert();
     }
   });
 }
@@ -7213,6 +7451,12 @@ window.addEventListener("scroll", scheduleSelectionBubbleSync, true);
 window.addEventListener("resize", scheduleSelectionBubbleSync);
 window.addEventListener("resize", scheduleFocusSavedLinesFit);
 window.visualViewport?.addEventListener("resize", scheduleFocusSavedLinesFit);
+window.addEventListener("beforeunload", (event) => {
+  if (!hasUnsavedFocusTargetEdits()) return;
+
+  event.preventDefault();
+  event.returnValue = "";
+});
 
 elements.editorShell.addEventListener("click", (event) => {
   const savedLineButton = event.target.closest("[data-saved-line-action]");
@@ -7256,6 +7500,15 @@ function handleEditorRichTextareaInput(event) {
 elements.tabContent.addEventListener("input", handleScriptReadingInput);
 elements.editorShell.addEventListener("input", handleScriptReadingInput);
 elements.editorShell.addEventListener("input", handleEditorRichTextareaInput);
+
+elements.tabContent.addEventListener("input", (event) => {
+  const focusTargetEditor = event.target.closest("[data-focus-target-editor]");
+  if (!focusTargetEditor) return;
+
+  state.versionFocusInsert.targetDraft = focusTargetEditor.value;
+  state.versionFocusInsert.dirty = true;
+  scheduleFocusSavedLinesFit();
+});
 
 elements.editorBackdrop.addEventListener("click", () => {
   if (editorBusy) return;
