@@ -3730,6 +3730,7 @@ function renderOverviewTab(speech) {
           <span class="meta-chip">${version?.label || "No version"}</span>
           ${quickEditing ? `<span class="meta-chip" data-quick-script-status>${state.quickScriptEdit.dirty ? "Unsaved edits" : "Editing here"}</span>` : ""}
           <button class="ghost-button" type="button" data-action="start-teleprompter">Teleprompter</button>
+          <button class="ghost-button" type="button" data-action="copy-speech-body">Copy Speech</button>
           ${quickEditing ? `
             <button class="primary-button" type="button" data-action="save-quick-script-edit" data-quick-script-save ${state.quickScriptEdit.dirty && !state.quickScriptEdit.saving ? "" : "disabled"}>${state.quickScriptEdit.saving ? "Saving..." : "Save"}</button>
             <button class="ghost-button" type="button" data-action="cancel-quick-script-edit">Cancel</button>
@@ -3814,6 +3815,7 @@ function renderVersionsTab(speech) {
           <button class="ghost-button new-version-action-button" type="button" data-action="new-version">New Version</button>
           <button class="ghost-button" type="button" data-action="paste-llm-rewrite">Paste LLM Rewrite</button>
           <button class="ghost-button" type="button" data-action="start-teleprompter">Teleprompter</button>
+          <button class="ghost-button" type="button" data-action="copy-speech-body">Copy Speech</button>
           <button class="ghost-button" type="button" data-action="save-selected-line">Save Line</button>
           ${quickEditing ? `
             <span class="meta-chip" data-quick-script-status>${state.quickScriptEdit.dirty ? "Unsaved edits" : "Editing here"}</span>
@@ -5454,6 +5456,33 @@ async function copyEditorSpeechBody() {
   } finally {
     elements.copyEditorButton.disabled = false;
     elements.copyEditorButton.textContent = originalLabel;
+  }
+}
+
+async function copyDisplayedSpeechBody() {
+  const speech = ensureSelection();
+  const version = getSelectedVersionForSpeech(speech);
+  if (!speech || !version) return;
+
+  const quickEditor = state.quickScriptEdit.versionId === version.id
+    ? elements.tabContent.querySelector("[data-quick-script-editor]")
+    : null;
+  const text = multilineText(quickEditor?.value ?? (
+    state.quickScriptEdit.versionId === version.id
+      ? state.quickScriptEdit.draft
+      : version.speechBody
+  ));
+
+  if (!text) {
+    setPageStatus("Nothing to copy yet.", "warn");
+    return;
+  }
+
+  try {
+    await copyTextToClipboard(text);
+    setPageStatus("Speech copied to clipboard.", "ok");
+  } catch (error) {
+    setPageStatus(error.message || "Could not copy the speech.", "error");
   }
 }
 
@@ -7117,6 +7146,11 @@ async function runAction(action) {
 
   if (action === "save-quick-script-edit" && speech) {
     await saveQuickScriptEdit();
+    return;
+  }
+
+  if (action === "copy-speech-body" && speech) {
+    await copyDisplayedSpeechBody();
     return;
   }
 
