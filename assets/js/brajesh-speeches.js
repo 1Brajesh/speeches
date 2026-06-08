@@ -5346,6 +5346,15 @@ function versionEditorConfig(speech, version) {
   const sourcePromptValue = isEdit
     ? (version.sourcePrompt || "")
     : (isLlmRewrite ? "" : (sourceVersion?.sourcePrompt || ""));
+  const hiddenVersionFields = `
+    <input type="hidden" name="label" value="${escapeHtml(labelValue)}">
+    <input type="hidden" name="estimatedMinutes" value="${escapeHtml(String(isEdit ? version.estimatedMinutes : (sourceVersion?.estimatedMinutes || "")))}">
+    <input type="hidden" name="versionType" value="${escapeHtml(isEdit ? version.versionType : initialVersionType)}">
+    <input type="hidden" name="sourceModel" value="${escapeHtml(isEdit ? version.sourceModel : initialSourceModel)}">
+    <input type="hidden" name="basedOn" value="${escapeHtml(basedOnValue)}">
+    <textarea name="sourcePrompt" hidden>${escapeHtml(sourcePromptValue)}</textarea>
+    <textarea name="revisionNote" hidden>${escapeHtml(revisionValue)}</textarea>
+  `;
 
   return {
     layout: "studio",
@@ -5363,6 +5372,16 @@ function versionEditorConfig(speech, version) {
     saveLabel: isEdit ? "Save Version" : (isLlmRewrite ? "Save Rewrite" : "Create Version"),
     fields: `
       <div class="studio-layout">
+        ${isBulletEditor ? `
+          ${hiddenVersionFields}
+          ${renderRehearsalBulletComposer({
+            bodyName: "speechBody",
+            bodyValue,
+            bulletsId: "versionBulletsInput",
+            bulletsName: "rehearsalBullets",
+            bulletValue,
+          })}
+        ` : `
         <div class="editor-card">
           <div class="editor-card-head">
             <div>
@@ -5413,13 +5432,7 @@ function versionEditorConfig(speech, version) {
 
         ${renderSavedLinesTray(speech, { compact: true, collapsible: true })}
 
-        ${isBulletEditor ? renderRehearsalBulletComposer({
-          bodyName: "speechBody",
-          bodyValue,
-          bulletsId: "versionBulletsInput",
-          bulletsName: "rehearsalBullets",
-          bulletValue,
-        }) : renderScriptComposer({
+        ${renderScriptComposer({
           heading: "Speech Body",
           copy: "Keep the writing surface full-width. Rehearsal bullets are available below when you need cue edits.",
           bodyId: "versionBodyInput",
@@ -5429,6 +5442,7 @@ function versionEditorConfig(speech, version) {
           bulletsName: "rehearsalBullets",
           bulletValue,
         })}
+        `}
       </div>
     `,
   };
