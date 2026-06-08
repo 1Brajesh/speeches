@@ -133,7 +133,7 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
   - Saved Lines cards default to a tight text-only collapsed view packed at the top of the drawer; expanding a line reveals source metadata and actions.
   - the selected version can be deleted from the `Versions` detail header when the speech has more than one version.
   - `Edit Script` uses a collapsible `Rehearsal Bullets` panel.
-  - `Edit Bullets` from the rehearsal view opens `Edit Script` directly to the expanded `Rehearsal Bullets` panel and returns to the rehearsal bullets section after save.
+  - `Edit Bullets` from the rehearsal view opens a wide bullet-drafting workspace with rehearsal bullets beside a read-only speech reference, then returns to the rehearsal bullets section after save.
   - `Edit Script` footer includes a `Copy Speech` action that copies the current draft text, including unsaved edits.
   - script text size, line spacing, and paragraph spacing now live in the dedicated `Settings` workspace instead of taking room inside speech reading and editing surfaces.
   - reading settings are saved per admin account in Supabase-backed user settings, not local browser storage.
@@ -162,7 +162,7 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
 
 - Important: when speeches UI changes appear not to register after deploy, check for stale cached JS.
 - The speeches page currently cache-busts the module URL in `index.html`:
-  - `./assets/js/brajesh-speeches.js?v=20260608a`
+  - `./assets/js/brajesh-speeches.js?v=20260608b`
 - If future speeches JS changes appear missing in production, bump that query-string version.
 
 ## Useful Starting Point

@@ -4856,6 +4856,7 @@ function closeEditor() {
   };
 
   elements.editorShell.dataset.layout = "";
+  elements.editorShell.dataset.entryPoint = "";
   elements.editorShell.hidden = true;
   elements.editorFields.innerHTML = "";
   elements.editorContextNote.textContent = "";
@@ -5090,6 +5091,49 @@ function renderScriptComposer({
   `;
 }
 
+function renderRehearsalBulletComposer({
+  bodyName,
+  bodyValue,
+  bulletsId,
+  bulletsName,
+  bulletValue,
+}) {
+  const bulletCount = parseLineList(bulletValue).length;
+  const wordCount = String(bodyValue || "").trim().split(/\s+/).filter(Boolean).length;
+
+  return `
+    <div class="bullet-drafting-workspace">
+      <textarea name="${escapeHtml(bodyName)}" hidden>${escapeHtml(bodyValue)}</textarea>
+      <div class="editor-card bullet-drafting-panel">
+        <div class="editor-card-head">
+          <div>
+            <h3>Rehearsal Bullets</h3>
+            <p class="editor-card-copy">Draft cue cards while the speech stays visible beside them.</p>
+          </div>
+          <span class="meta-chip">${bulletCount} ${bulletCount === 1 ? "bullet" : "bullets"}</span>
+        </div>
+        <div class="field bullet-drafting-field">
+          <label for="${escapeHtml(bulletsId)}">Rehearsal Bullets</label>
+          <textarea id="${escapeHtml(bulletsId)}" name="${escapeHtml(bulletsName)}" data-bullets="true">${escapeHtml(bulletValue)}</textarea>
+          <p class="field-hint">One bullet per line. Wrap related bullets in { and } to show them on one cue card. Add a trailing //5s, //1m, or //1:30 to time a cue.</p>
+        </div>
+      </div>
+      <div class="editor-card speech-reference-panel">
+        <div class="editor-card-head">
+          <div>
+            <h3>Speech Reference</h3>
+            <p class="editor-card-copy">Read-only source text for shaping rehearsal cues.</p>
+          </div>
+          <span class="meta-chip">${wordCount} ${wordCount === 1 ? "word" : "words"}</span>
+        </div>
+        <div class="speech-reference-body">
+          ${renderScriptBodyText(bodyValue)}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function statusOptions(selectedValue) {
   return renderOptions([
     { value: "idea", label: "Idea" },
@@ -5278,6 +5322,7 @@ function speechEditorConfig(speech) {
 function versionEditorConfig(speech, version) {
   const isEdit = state.editor.intent === "edit";
   const isLlmRewrite = !isEdit && state.editor.entryPoint === "llm-rewrite";
+  const isBulletEditor = isEdit && state.editor.entryPoint === "rehearsal-bullets";
   const sourceVersion = isEdit
     ? version
     : getVersionById(speech, state.editor.sourceVersionId) || getSelectedVersionForSpeech(speech);
@@ -5305,14 +5350,16 @@ function versionEditorConfig(speech, version) {
 
   return {
     layout: "studio",
-    modeLabel: isEdit ? "Edit Script" : (isLlmRewrite ? "Paste LLM Rewrite" : "New Version"),
+    modeLabel: isBulletEditor ? "Edit Bullets" : (isEdit ? "Edit Script" : (isLlmRewrite ? "Paste LLM Rewrite" : "New Version")),
     title: isEdit ? version.label : (isLlmRewrite ? `Paste Rewrite for ${speech.title}` : `New Version for ${speech.title}`),
     context: `${speech.title} · ${speech.versions.length} versions in library`,
-    footer: isEdit
+    footer: isBulletEditor
+      ? "Saving updates rehearsal bullets while preserving the current speech body."
+      : (isEdit
       ? "Saving here updates the selected version and keeps it active."
       : (isLlmRewrite
         ? "LLM rewrites are saved as versions with source metadata so you can compare and harvest strong lines later."
-        : "New versions are created from the selected version and made active immediately."),
+        : "New versions are created from the selected version and made active immediately.")),
     dismissLabel: "Back to Workspace",
     saveLabel: isEdit ? "Save Version" : (isLlmRewrite ? "Save Rewrite" : "Create Version"),
     fields: `
@@ -5367,7 +5414,13 @@ function versionEditorConfig(speech, version) {
 
         ${renderSavedLinesTray(speech, { compact: true, collapsible: true })}
 
-        ${renderScriptComposer({
+        ${isBulletEditor ? renderRehearsalBulletComposer({
+          bodyName: "speechBody",
+          bodyValue,
+          bulletsId: "versionBulletsInput",
+          bulletsName: "rehearsalBullets",
+          bulletValue,
+        }) : renderScriptComposer({
           heading: "Speech Body",
           copy: "Keep the writing surface full-width. Rehearsal bullets are available below when you need cue edits.",
           bodyId: "versionBodyInput",
@@ -5633,6 +5686,7 @@ function renderEditor() {
   elements.editorContextNote.textContent = config.context;
   elements.editorFooterNote.textContent = config.footer;
   elements.editorShell.dataset.layout = config.layout || "drawer";
+  elements.editorShell.dataset.entryPoint = state.editor.entryPoint || "";
   elements.closeEditorButton.textContent = config.dismissLabel || "Cancel";
   elements.cancelEditorButton.textContent = config.dismissLabel || "Close";
   elements.saveEditorButton.dataset.defaultLabel = config.saveLabel;
@@ -7187,6 +7241,27 @@ function renderManualRehearsalTimingReview(timing) {
   `;
 }
 
+function renderFullscreenCueCard(cue) {
+  const lines = Array.isArray(cue?.lines) && cue.lines.length
+    ? cue.lines
+    : String(cue?.text || "").split("\n").map((line) => line.trim()).filter(Boolean);
+
+  if (!lines.length) {
+    return "";
+  }
+
+  return `
+    <ul class="fullscreen-cue-list">
+      ${lines.map((line) => `
+        <li class="fullscreen-cue-item">
+          <span class="fullscreen-cue-dash" aria-hidden="true">-</span>
+          <span>${displayText(line)}</span>
+        </li>
+      `).join("")}
+    </ul>
+  `;
+}
+
 function renderRehearsalScreen(options = {}) {
   const { resetAutoTimer = false } = options;
   const { speech, version } = getRehearsalVersion();
@@ -7220,8 +7295,10 @@ function renderRehearsalScreen(options = {}) {
   elements.fullscreenBullet.dataset.cueSize = reviewActive ? "review" : (introActive ? "intro" : getRehearsalCueSize(stageCopy));
   if (reviewActive) {
     elements.fullscreenBullet.innerHTML = renderManualRehearsalTimingReview(timing);
-  } else {
+  } else if (introActive) {
     elements.fullscreenBullet.textContent = stageCopy;
+  } else {
+    elements.fullscreenBullet.innerHTML = renderFullscreenCueCard(cues[index]);
   }
   elements.fullscreenBullet.removeAttribute("style");
   elements.fullscreenProgress.style.width = `${progress}%`;

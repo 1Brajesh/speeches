@@ -2453,6 +2453,10 @@
       overflow: hidden;
     }
 
+    .editor-shell[data-layout="studio"][data-entry-point="rehearsal-bullets"] .editor-drawer {
+      width: min(1680px, calc(100vw - 28px));
+    }
+
     .editor-shell[data-layout="modal"] .editor-drawer {
       width: min(760px, 100%);
       height: auto;
@@ -2663,6 +2667,54 @@
       min-height: 220px;
     }
 
+    .bullet-drafting-workspace {
+      display: grid;
+      grid-template-columns: minmax(320px, 1fr) minmax(520px, 2fr);
+      gap: 18px;
+      align-items: stretch;
+      min-height: min(680px, 68vh);
+    }
+
+    .bullet-drafting-panel,
+    .speech-reference-panel {
+      min-height: 0;
+      align-content: start;
+    }
+
+    .bullet-drafting-panel {
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .bullet-drafting-field {
+      min-height: 0;
+    }
+
+    .editor-shell[data-layout="studio"] .bullet-drafting-field textarea[data-bullets="true"] {
+      min-height: 420px;
+      height: 100%;
+      resize: none;
+      overflow: auto;
+    }
+
+    .speech-reference-panel {
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .speech-reference-body {
+      min-height: 0;
+      overflow: auto;
+      padding: 18px;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    .speech-reference-body .body-copy {
+      font-family: var(--serif);
+      font-size: var(--script-text-size);
+      line-height: var(--script-line-height);
+    }
+
     .editor-footer {
       position: sticky;
       bottom: 0;
@@ -2854,6 +2906,29 @@
       font-size: clamp(1.55rem, 2.8vw, 3rem);
       line-height: 1.16;
       letter-spacing: 0;
+    }
+
+    .fullscreen-body:not([data-intro-active="true"]):not([data-review-active="true"]) .fullscreen-bullet {
+      text-align: left;
+    }
+
+    .fullscreen-cue-list {
+      display: grid;
+      gap: 0.38em;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .fullscreen-cue-item {
+      display: grid;
+      grid-template-columns: 0.7em minmax(0, 1fr);
+      gap: 0.18em;
+      align-items: start;
+    }
+
+    .fullscreen-cue-dash {
+      color: #9fc9f2;
     }
 
     .fullscreen-body[data-intro-active="true"] .fullscreen-bullet {
@@ -3405,6 +3480,25 @@
         border-radius: 22px;
       }
 
+      .editor-shell[data-layout="studio"][data-entry-point="rehearsal-bullets"] .editor-drawer {
+        width: 100%;
+      }
+
+      .bullet-drafting-workspace {
+        grid-template-columns: 1fr;
+        min-height: 0;
+      }
+
+      .editor-shell[data-layout="studio"] .bullet-drafting-field textarea[data-bullets="true"] {
+        min-height: 360px;
+        height: auto;
+        resize: vertical;
+      }
+
+      .speech-reference-body {
+        max-height: 58vh;
+      }
+
       .fullscreen-body {
         align-items: start;
         min-height: 0;
@@ -3653,6 +3747,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260608a"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260608b"></script>
 </body>
 </html>
