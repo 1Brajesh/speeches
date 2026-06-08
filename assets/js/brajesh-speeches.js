@@ -7319,24 +7319,30 @@ function renderManualRehearsalTimingReview(timing) {
   `;
 }
 
-function renderFullscreenCueCard(cue) {
+function renderFullscreenCueCard(cue, nextCue = null) {
   const lines = Array.isArray(cue?.lines) && cue.lines.length
     ? cue.lines
     : String(cue?.text || "").split("\n").map((line) => line.trim()).filter(Boolean);
+  const nextLine = Array.isArray(nextCue?.lines) && nextCue.lines.length
+    ? cleanText(nextCue.lines[0])
+    : cleanText(String(nextCue?.text || "").split("\n")[0] || "");
 
   if (!lines.length) {
     return "";
   }
 
   return `
-    <ul class="fullscreen-cue-list">
-      ${lines.map((line) => `
-        <li class="fullscreen-cue-item">
-          <span class="fullscreen-cue-dash" aria-hidden="true">-</span>
-          <span>${displayText(line)}</span>
-        </li>
-      `).join("")}
-    </ul>
+    <div>
+      <ul class="fullscreen-cue-list">
+        ${lines.map((line) => `
+          <li class="fullscreen-cue-item">
+            <span class="fullscreen-cue-dash" aria-hidden="true">-</span>
+            <span>${displayText(line)}</span>
+          </li>
+        `).join("")}
+      </ul>
+      ${nextLine ? `<div class="fullscreen-next-cue">Next: ${displayText(nextLine)}</div>` : ""}
+    </div>
   `;
 }
 
@@ -7376,7 +7382,7 @@ function renderRehearsalScreen(options = {}) {
   } else if (introActive) {
     elements.fullscreenBullet.textContent = stageCopy;
   } else {
-    elements.fullscreenBullet.innerHTML = renderFullscreenCueCard(cues[index]);
+    elements.fullscreenBullet.innerHTML = renderFullscreenCueCard(cues[index], cues[index + 1]);
   }
   elements.fullscreenBullet.removeAttribute("style");
   elements.fullscreenProgress.style.width = `${progress}%`;
