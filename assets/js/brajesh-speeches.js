@@ -21,6 +21,7 @@ const SCRIPT_PARAGRAPH_SPACING_DEFAULT = 1.2;
 const REHEARSAL_MIN_CARD_SECONDS = 1;
 const REHEARSAL_TIMER_TICK_MS = 250;
 const REHEARSAL_INTRO_DURATION_MS = 1600;
+const REHEARSAL_BULLET_SCROLL_STORAGE_PREFIX = "brajesh-speeches:rehearsal-bullet-scroll:";
 const TELEPROMPTER_DEFAULT_WPM = 130;
 const TELEPROMPTER_MIN_DURATION_MS = 30000;
 const TELEPROMPTER_SPEED_MIN = 0.5;
@@ -5113,7 +5114,7 @@ function renderRehearsalBulletComposer({
           <span class="meta-chip">${bulletCount} ${bulletCount === 1 ? "bullet" : "bullets"}</span>
         </div>
         <div class="bullet-drafting-field">
-          <textarea id="${escapeHtml(bulletsId)}" name="${escapeHtml(bulletsName)}" data-bullets="true">${escapeHtml(bulletValue)}</textarea>
+          <textarea id="${escapeHtml(bulletsId)}" name="${escapeHtml(bulletsName)}" data-bullets="true" data-bullet-scroll-pane="bullets">${escapeHtml(bulletValue)}</textarea>
           <p class="field-hint">One bullet per line. Wrap related bullets in { and } to show them on one cue card. Add a trailing //5s, //1m, or //1:30 to time a cue.</p>
         </div>
       </div>
@@ -5125,12 +5126,75 @@ function renderRehearsalBulletComposer({
           </div>
           <span class="meta-chip">${wordCount} ${wordCount === 1 ? "word" : "words"}</span>
         </div>
-        <div class="speech-reference-body">
+        <div class="speech-reference-body" data-bullet-scroll-pane="speech">
           ${renderScriptBodyText(bodyValue)}
         </div>
       </div>
     </div>
   `;
+}
+
+function rehearsalBulletScrollStorageKey(versionId = state.editor.versionId) {
+  return versionId ? `${REHEARSAL_BULLET_SCROLL_STORAGE_PREFIX}${versionId}` : "";
+}
+
+function readRehearsalBulletScrollState(versionId = state.editor.versionId) {
+  const key = rehearsalBulletScrollStorageKey(versionId);
+  if (!key) return {};
+
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeRehearsalBulletScrollState(nextState, versionId = state.editor.versionId) {
+  const key = rehearsalBulletScrollStorageKey(versionId);
+  if (!key) return;
+
+  try {
+    const existing = readRehearsalBulletScrollState(versionId);
+    window.localStorage.setItem(key, JSON.stringify({
+      ...existing,
+      ...nextState,
+      updatedAt: Date.now(),
+    }));
+  } catch {
+    // Ignore localStorage failures; scroll memory is a convenience only.
+  }
+}
+
+function restoreRehearsalBulletScrollPositions() {
+  if (state.editor.kind !== "version" || state.editor.entryPoint !== "rehearsal-bullets") {
+    return;
+  }
+
+  const scrollState = readRehearsalBulletScrollState();
+  const bulletPane = elements.editorFields.querySelector('[data-bullet-scroll-pane="bullets"]');
+  const speechPane = elements.editorFields.querySelector('[data-bullet-scroll-pane="speech"]');
+
+  if (bulletPane) {
+    bulletPane.scrollTop = Math.max(0, Number(scrollState.bullets) || 0);
+  }
+
+  if (speechPane) {
+    speechPane.scrollTop = Math.max(0, Number(scrollState.speech) || 0);
+  }
+}
+
+function saveRehearsalBulletScrollPosition(pane) {
+  if (state.editor.kind !== "version" || state.editor.entryPoint !== "rehearsal-bullets") {
+    return;
+  }
+
+  const paneName = pane?.dataset?.bulletScrollPane;
+  if (paneName !== "bullets" && paneName !== "speech") {
+    return;
+  }
+
+  writeRehearsalBulletScrollState({ [paneName]: Math.max(0, Math.round(pane.scrollTop || 0)) });
 }
 
 function statusOptions(selectedValue) {
@@ -5726,6 +5790,7 @@ function renderEditor() {
   elements.copyEditorButton.textContent = "Copy Speech";
 
   requestAnimationFrame(() => {
+    restoreRehearsalBulletScrollPositions();
     focusEditorEntryPoint();
   });
 }
@@ -8134,6 +8199,9 @@ function preserveSavedLineSelection(event) {
 
 elements.tabContent.addEventListener("mousedown", preserveSavedLineSelection);
 elements.editorShell.addEventListener("mousedown", preserveSavedLineSelection);
+elements.editorFields.addEventListener("scroll", (event) => {
+  saveRehearsalBulletScrollPosition(event.target);
+}, true);
 
 if (elements.selectionBubble) {
   elements.selectionBubble.addEventListener("pointerdown", (event) => {
@@ -8220,6 +8288,11 @@ function handleEditorRichTextareaInput(event) {
 elements.tabContent.addEventListener("input", handleScriptReadingInput);
 elements.editorShell.addEventListener("input", handleScriptReadingInput);
 elements.editorShell.addEventListener("input", handleEditorRichTextareaInput);
+elements.editorShell.addEventListener("input", (event) => {
+  if (event.target?.matches?.('[data-bullet-scroll-pane="bullets"]')) {
+    saveRehearsalBulletScrollPosition(event.target);
+  }
+});
 
 elements.tabContent.addEventListener("input", (event) => {
   const focusTargetEditor = event.target.closest("[data-focus-target-editor]");
