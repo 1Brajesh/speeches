@@ -87,6 +87,7 @@ const state = {
     versionId: null,
     index: 0,
     mode: "auto",
+    timingCapture: null,
     nextAdvanceAt: 0,
     startedAt: 0,
     cardStartedAt: 0,
@@ -207,8 +208,10 @@ const elements = {
   fullscreenBody: document.querySelector("#fullscreenBody"),
   fullscreenModeToggle: document.querySelector("#fullscreenModeToggle"),
   fullscreenCardTimer: document.querySelector("#fullscreenCardTimer"),
+  fullscreenCardProgress: document.querySelector("#fullscreenCardProgress"),
   fullscreenElapsedTimer: document.querySelector("#fullscreenElapsedTimer"),
   mobileFullscreenCardTimer: document.querySelector("#mobileFullscreenCardTimer"),
+  mobileFullscreenCardProgress: document.querySelector("#mobileFullscreenCardProgress"),
   mobileFullscreenElapsedTimer: document.querySelector("#mobileFullscreenElapsedTimer"),
   pauseRehearsalButton: document.querySelector("#pauseRehearsalButton"),
   fullscreenBullet: document.querySelector("#fullscreenBullet"),
@@ -349,6 +352,7 @@ function resetSpeechState() {
   state.rehearsal.speechId = null;
   state.rehearsal.versionId = null;
   state.rehearsal.index = 0;
+  state.rehearsal.timingCapture = null;
   state.rehearsal.nextAdvanceAt = 0;
   state.rehearsal.startedAt = 0;
   state.rehearsal.cardStartedAt = 0;
@@ -883,6 +887,10 @@ function formatSecondsPerCardLabel(totalSeconds) {
 }
 
 function getRehearsalIntroLabel(timing) {
+  if (timing.timingSource === "learned") {
+    return "Learned timing";
+  }
+
   if (timing.customDurationCount) {
     return "Variable timing";
   }
@@ -903,6 +911,10 @@ function rehearsalCueFitProfile(cueSize, viewportWidth, viewportHeight) {
 
   if (cueSize === "intro") {
     return { widthRatio: 0.78, minFont: 28, maxFont: mobilePortrait ? 42 : 48, lineHeight: 1.1 };
+  }
+
+  if (cueSize === "review") {
+    return { widthRatio: 0.86, minFont: 16, maxFont: 18, lineHeight: 1.45 };
   }
 
   if (mobilePortrait) {
@@ -1045,16 +1057,126 @@ function parseRehearsalCue(rawBullet) {
   };
 }
 
+function createRehearsalCard(cues, options = {}) {
+  const { isGroup = false, groupDurationSeconds = null } = options;
+  const cleanCues = (Array.isArray(cues) ? cues : []).filter((cue) => cue?.text);
+
+  if (!cleanCues.length) {
+    return null;
+  }
+
+  const everyCueTimed = cleanCues.every((cue) => cue.hasCustomDuration);
+  const summedCueDurationSeconds = everyCueTimed
+    ? cleanCues.reduce((total, cue) => total + (cue.durationSeconds || 0), 0)
+    : null;
+  const durationSeconds = groupDurationSeconds || summedCueDurationSeconds;
+
+  return {
+    rawText: cleanCues.map((cue) => cue.rawText).join("\n"),
+    text: cleanCues.map((cue) => cue.text).join("\n"),
+    lines: cleanCues.map((cue) => cue.text),
+    durationSeconds,
+    hasCustomDuration: durationSeconds > 0,
+    isGroup,
+  };
+}
+
 function getRehearsalCues(bullets = []) {
-  return (Array.isArray(bullets) ? bullets : []).map(parseRehearsalCue);
+  const lines = Array.isArray(bullets) ? bullets : [];
+  const cards = [];
+  let groupCues = null;
+  let groupDurationSeconds = null;
+
+  const pushGroup = () => {
+    const card = createRehearsalCard(groupCues, {
+      isGroup: true,
+      groupDurationSeconds,
+    });
+
+    if (card) cards.push(card);
+    groupCues = null;
+    groupDurationSeconds = null;
+  };
+
+  lines.forEach((line) => {
+    let text = cleanText(line);
+    if (!text) return;
+
+    const opensGroup = text.startsWith("{");
+    if (opensGroup) {
+      if (groupCues) pushGroup();
+      groupCues = [];
+      groupDurationSeconds = null;
+      text = cleanText(text.slice(1));
+    }
+
+    const closingIndex = text.lastIndexOf("}");
+    const closesGroup = closingIndex >= 0;
+    let closingDurationSeconds = null;
+
+    if (closesGroup) {
+      const beforeBrace = cleanText(text.slice(0, closingIndex));
+      const afterBrace = cleanText(text.slice(closingIndex + 1));
+      text = beforeBrace;
+
+      if (afterBrace.startsWith("//")) {
+        closingDurationSeconds = parseRehearsalDurationValue(afterBrace.slice(2));
+      }
+    }
+
+    if (groupCues) {
+      if (text) groupCues.push(parseRehearsalCue(text));
+      if (closingDurationSeconds) groupDurationSeconds = closingDurationSeconds;
+      if (closesGroup) pushGroup();
+      return;
+    }
+
+    if (text) {
+      const card = createRehearsalCard([parseRehearsalCue(text)]);
+      if (card) cards.push(card);
+    }
+  });
+
+  if (groupCues) pushGroup();
+
+  return cards;
+}
+
+function getRehearsalCardSignature(cues = []) {
+  return cues.map((cue) => cue.text);
+}
+
+function rehearsalSignaturesMatch(left = [], right = []) {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((value, index) => value === right[index]);
+}
+
+function getLearnedRehearsalDurationsMs(version, signature) {
+  const learned = version?.rehearsalTiming || {};
+  const cardTexts = Array.isArray(learned.cardTexts) ? learned.cardTexts : [];
+  const durationsMs = Array.isArray(learned.durationsMs) ? learned.durationsMs : [];
+
+  if (!rehearsalSignaturesMatch(cardTexts, signature) || durationsMs.length !== signature.length) {
+    return [];
+  }
+
+  const normalized = durationsMs.map((durationMs) => Math.max(REHEARSAL_MIN_CARD_SECONDS * 1000, Number(durationMs) || 0));
+  return normalized.every((durationMs) => durationMs > 0) ? normalized : [];
 }
 
 function getRehearsalTiming(version, bullets = version?.rehearsalBullets || []) {
   const cues = getRehearsalCues(bullets);
+  const signature = getRehearsalCardSignature(cues);
+  const learnedDurationsMs = getLearnedRehearsalDurationsMs(version, signature);
   const bulletCount = cues.length;
+  const rawBulletCount = Array.isArray(bullets) ? bullets.length : 0;
   const minutes = Math.max(0, Number.parseInt(version?.estimatedMinutes || 0, 10) || 0);
   const totalSeconds = minutes * 60;
   const customDurationCount = cues.filter((cue) => cue.hasCustomDuration).length;
+  const allCardsHaveCustomDurations = bulletCount > 0 && customDurationCount === bulletCount;
   const remainingCueCount = Math.max(0, bulletCount - customDurationCount);
   const customDurationSeconds = cues.reduce((total, cue) => total + (cue.durationSeconds || 0), 0);
   const remainingSeconds = Math.max(0, totalSeconds - customDurationSeconds);
@@ -1065,21 +1187,30 @@ function getRehearsalTiming(version, bullets = version?.rehearsalBullets || []) 
     const durationSeconds = cue.durationSeconds || defaultDurationSeconds;
     return durationSeconds > 0 ? Math.max(REHEARSAL_MIN_CARD_SECONDS * 1000, durationSeconds * 1000) : 0;
   });
-  const intervalMs = cardDurationsMs[0] || (bulletCount && totalSeconds > 0
+  const effectiveCardDurationsMs = learnedDurationsMs.length === bulletCount ? learnedDurationsMs : cardDurationsMs;
+  const intervalMs = effectiveCardDurationsMs[0] || (bulletCount && totalSeconds > 0
     ? Math.max(REHEARSAL_MIN_CARD_SECONDS * 1000, (totalSeconds * 1000) / bulletCount)
     : 0);
+  const timingSource = learnedDurationsMs.length === bulletCount
+    ? "learned"
+    : (customDurationCount ? "custom" : "auto");
 
   return {
     bulletCount,
+    cardCount: bulletCount,
+    rawBulletCount,
     cues,
+    signature,
     minutes,
     totalSeconds,
     intervalMs,
-    cardDurationsMs,
+    cardDurationsMs: effectiveCardDurationsMs,
     customDurationCount,
+    learnedDurationCount: learnedDurationsMs.length,
     defaultDurationSeconds,
+    timingSource,
     customDurationsExceedTarget: totalSeconds > 0 && customDurationSeconds > totalSeconds,
-    autoAvailable: bulletCount > 0 && minutes > 0,
+    autoAvailable: bulletCount > 0 && (learnedDurationsMs.length === bulletCount || allCardsHaveCustomDurations || minutes > 0),
   };
 }
 
@@ -1132,16 +1263,20 @@ function getRehearsalTimingSummary(timing) {
   }
 
   if (!timing.autoAvailable) {
-    return "Manual pacing is active. Set Target Minutes above 0 to enable auto-advance.";
+    return "Manual pacing is active. Rehearse once manually to save timing, or set Target Minutes above 0.";
   }
 
   const cadence = formatDurationLabel(timing.intervalMs / 1000);
-  const bulletLabel = formatCountLabel(timing.bulletCount, "bullet");
+  const cardLabel = formatCountLabel(timing.cardCount, "card");
   const targetLabel = formatMinuteLabel(timing.minutes);
-  const customLabel = formatCountLabel(timing.customDurationCount, "timed bullet");
+  const customLabel = formatCountLabel(timing.customDurationCount, "timed card");
+
+  if (timing.timingSource === "learned") {
+    return `Learned pacing is active. Auto will use your saved manual rehearsal timing across ${cardLabel}.`;
+  }
 
   if (timing.customDurationsExceedTarget) {
-    return `Timed bullets exceed the ${targetLabel} target. Custom timings stay strict; untimed cards use the minimum ${REHEARSAL_MIN_CARD_SECONDS}s pace.`;
+    return `Timed cards exceed the ${targetLabel} target. Custom timings stay strict; untimed cards use the minimum ${REHEARSAL_MIN_CARD_SECONDS}s pace.`;
   }
 
   if (timing.customDurationCount) {
@@ -1149,10 +1284,10 @@ function getRehearsalTimingSummary(timing) {
   }
 
   if (getEffectiveRehearsalMode(timing) === "auto") {
-    return `Auto pacing is selected. Cards will advance every ${cadence} across ${bulletLabel} from a ${targetLabel} target.`;
+    return `Auto pacing is selected. Cards will advance every ${cadence} across ${cardLabel} from a ${targetLabel} target.`;
   }
 
-  return `Manual pacing is active. Auto would advance every ${cadence} across ${bulletLabel} from a ${targetLabel} target.`;
+  return `Manual pacing is active. Auto would advance every ${cadence} across ${cardLabel} from a ${targetLabel} target.`;
 }
 
 function isRehearsalIntroActive() {
@@ -1187,6 +1322,85 @@ function getRehearsalElapsedLabel() {
   const now = state.rehearsal.paused ? state.rehearsal.pausedAt : Date.now();
   const elapsedSeconds = (now - state.rehearsal.startedAt) / 1000;
   return formatElapsedClock(elapsedSeconds);
+}
+
+function getRehearsalProgressLabel(timing) {
+  const total = Math.max(1, timing?.cardCount || 0);
+  const current = Math.max(1, Math.min(total, (state.rehearsal.index || 0) + 1));
+  return `${current}/${total}`;
+}
+
+function resetRehearsalTimingCapture() {
+  state.rehearsal.timingCapture = null;
+}
+
+function createRehearsalTimingCapture(timing, startIndex = state.rehearsal.index) {
+  return {
+    signature: Array.isArray(timing?.signature) ? [...timing.signature] : [],
+    durationsMs: [],
+    currentStartedAt: Date.now(),
+    startIndex: Math.max(0, startIndex || 0),
+    reviewOpen: false,
+    saving: false,
+    status: "",
+    tone: "",
+  };
+}
+
+function startManualRehearsalTimingCapture(timing) {
+  state.rehearsal.timingCapture = createRehearsalTimingCapture(timing);
+}
+
+function shouldCaptureManualRehearsalTiming(timing) {
+  return getEffectiveRehearsalMode(timing) === "manual"
+    && timing?.cardCount > 0
+    && state.rehearsal.timingCapture
+    && rehearsalSignaturesMatch(state.rehearsal.timingCapture.signature, timing.signature);
+}
+
+function recordManualRehearsalCardDuration(timing, index = state.rehearsal.index) {
+  const capture = state.rehearsal.timingCapture;
+  if (!capture || !shouldCaptureManualRehearsalTiming(timing) || capture.reviewOpen) return false;
+
+  const safeIndex = Math.max(0, Math.min(index, timing.cardCount - 1));
+  capture.durationsMs[safeIndex] = Math.max(250, Date.now() - capture.currentStartedAt);
+  capture.currentStartedAt = Date.now();
+  return true;
+}
+
+function trimManualRehearsalCaptureForIndex(index) {
+  const capture = state.rehearsal.timingCapture;
+  if (!capture) return;
+
+  capture.durationsMs.length = Math.max(0, index);
+  capture.currentStartedAt = Date.now();
+  capture.reviewOpen = false;
+  capture.status = "";
+  capture.tone = "";
+}
+
+function getManualRehearsalCaptureTotalMs(capture = state.rehearsal.timingCapture) {
+  const durationsMs = Array.isArray(capture?.durationsMs) ? capture.durationsMs : [];
+  return durationsMs.reduce((total, durationMs) => total + (Number(durationMs) || 0), 0);
+}
+
+function canSaveManualRehearsalTiming(timing, capture = state.rehearsal.timingCapture) {
+  if (
+    !capture
+    || !rehearsalSignaturesMatch(capture.signature, timing.signature)
+    || !Array.isArray(capture.durationsMs)
+    || capture.durationsMs.length !== timing.cardCount
+  ) {
+    return false;
+  }
+
+  for (let index = 0; index < timing.cardCount; index += 1) {
+    if (!(Number(capture.durationsMs[index]) > 0)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function clearRehearsalTickTimer() {
@@ -1240,10 +1454,13 @@ function syncRehearsalTickTimer(options = {}) {
 
 function updateRehearsalCardTimers(timing) {
   const cardLabel = getRehearsalCardTimerLabel(timing);
+  const progressLabel = getRehearsalProgressLabel(timing);
   const elapsedLabel = getRehearsalElapsedLabel();
   elements.fullscreenCardTimer.textContent = cardLabel;
+  elements.fullscreenCardProgress.textContent = progressLabel;
   elements.fullscreenElapsedTimer.textContent = elapsedLabel;
   elements.mobileFullscreenCardTimer.textContent = cardLabel;
+  elements.mobileFullscreenCardProgress.textContent = progressLabel;
   elements.mobileFullscreenElapsedTimer.textContent = elapsedLabel;
 }
 
@@ -1271,7 +1488,7 @@ function tickRehearsalTimer() {
   }
 
   const autoMode = getEffectiveRehearsalMode(timing) === "auto" && timing.autoAvailable;
-  const hasNextCard = state.rehearsal.index < bullets.length - 1;
+  const hasNextCard = state.rehearsal.index < timing.cardCount - 1;
   const introActive = isRehearsalIntroActive();
 
   if (introActive) {
@@ -1296,7 +1513,7 @@ function tickRehearsalTimer() {
   }
 
   if (autoMode && hasNextCard && Date.now() >= state.rehearsal.nextAdvanceAt) {
-    state.rehearsal.index = Math.min(state.rehearsal.index + 1, bullets.length - 1);
+    state.rehearsal.index = Math.min(state.rehearsal.index + 1, timing.cardCount - 1);
     renderRehearsalScreen({ resetAutoTimer: true });
     return;
   }
@@ -1309,6 +1526,7 @@ function setRehearsalMode(mode, options = {}) {
   state.rehearsal.mode = nextMode;
   state.rehearsal.paused = false;
   state.rehearsal.pausedAt = 0;
+  resetRehearsalTimingCapture();
 
   if (elements.fullscreenRehearsal.hidden) {
     clearRehearsalTickTimer();
@@ -1321,6 +1539,8 @@ function setRehearsalMode(mode, options = {}) {
     if (!state.rehearsal.startedAt) {
       state.rehearsal.startedAt = Date.now();
     }
+    const { version } = getRehearsalVersion();
+    startManualRehearsalTimingCapture(getRehearsalTiming(version, version?.rehearsalBullets || []));
   }
 
   renderRehearsalScreen({ resetAutoTimer: options.resetTimer !== false });
@@ -1524,6 +1744,7 @@ function buildSpeechVersions(versionRows) {
     revisionNote: row.revision_note || "",
     speechBody: row.speech_body || "",
     rehearsalBullets: ensureTextArray(row.rehearsal_bullets),
+    rehearsalTiming: row.rehearsal_timing && typeof row.rehearsal_timing === "object" ? row.rehearsal_timing : null,
   }));
 
   versions.sort((a, b) => timestampMs(a.updatedAt) - timestampMs(b.updatedAt));
@@ -1638,7 +1859,7 @@ async function loadSpeechDetail(speechId, options = {}) {
   promise = Promise.all([
     db
       .from("brajesh_speech_versions")
-      .select("id, speech_id, based_on_version_id, label, estimated_minutes, version_type, source_model, source_prompt, revision_note, speech_body, rehearsal_bullets, created_at, updated_at")
+      .select("id, speech_id, based_on_version_id, label, estimated_minutes, version_type, source_model, source_prompt, revision_note, speech_body, rehearsal_bullets, rehearsal_timing, created_at, updated_at")
       .eq("speech_id", speechId)
       .order("created_at", { ascending: true }),
     db
@@ -3149,6 +3370,7 @@ function renderBackupMarkdown(content, exportedAt) {
           lines.push(`#### Version: ${version.label || "Untitled Version"}`, "");
           lines.push(`- Target minutes: ${version.estimated_minutes || 0}`);
           lines.push(`- Updated: ${version.updated_at || version.created_at || ""}`);
+          if (version.rehearsal_timing?.totalMs) lines.push(`- Learned rehearsal timing: ${formatDurationLabel(version.rehearsal_timing.totalMs / 1000)}`);
           if (version.revision_note) lines.push(`- Revision note: ${version.revision_note}`);
           lines.push("");
           if (version.speech_body) lines.push(version.speech_body, "");
@@ -4337,24 +4559,34 @@ function renderRehearsalTab(speech) {
     : "Open a larger cue card. Tap the right side to advance and the left side to go back.";
   const targetText = version ? `${version.estimatedMinutes} min` : "-";
   const cadenceText = timing.autoAvailable
-    ? (timing.customDurationCount ? "Variable timing" : `${formatDurationLabel(timing.intervalMs / 1000)} / card`)
+    ? (timing.timingSource === "learned"
+      ? "Learned timing"
+      : (timing.customDurationCount ? "Variable timing" : `${formatDurationLabel(timing.intervalMs / 1000)} / card`))
     : "Set target minutes";
+  const timingChipType = (cue) => {
+    if (timing.timingSource === "learned") return "learned";
+    return cue.hasCustomDuration ? "custom" : "auto";
+  };
+  const timingChipTitle = (cue) => {
+    if (timing.timingSource === "learned") return "Learned manual rehearsal timing";
+    return cue.hasCustomDuration ? "Custom timing" : "Auto-calculated timing";
+  };
 
   return `
     <div class="two-up rehearsal-layout">
       <div class="card rehearsal-card" data-tab-anchor="rehearsal-bullets">
         <div class="panel-head">
           <h4>${leftTitle}</h4>
-          <span class="meta-chip">${bullets.length} bullets</span>
+          <span class="meta-chip">${timing.cardCount} cards · ${bullets.length} bullets</span>
         </div>
         ${bullets.length ? `
           <div class="bullet-list rehearsal-bullet-list">
             ${cues.map((cue, index) => `
               <div class="bullet-card">
                 <div class="bullet-card-head">
-                  <strong>Bullet ${String(index + 1).padStart(2, "0")}</strong>
+                  <strong>${cue.isGroup ? "Group" : "Cue"} ${String(index + 1).padStart(2, "0")}</strong>
                   ${timing.autoAvailable ? `
-                    <span class="rehearsal-time-chip" data-timing="${cue.hasCustomDuration ? "custom" : "auto"}" title="${cue.hasCustomDuration ? "Custom timing" : "Auto-calculated timing"}">${escapeHtml(getRehearsalDurationLabel(timing, index))}</span>
+                    <span class="rehearsal-time-chip" data-timing="${timingChipType(cue)}" title="${timingChipTitle(cue)}">${escapeHtml(getRehearsalDurationLabel(timing, index))}</span>
                   ` : ""}
                 </div>
                 <p>${displayText(cue.text)}</p>
@@ -4392,7 +4624,7 @@ function renderRehearsalTab(speech) {
           </div>
           <div class="info-row">
             <strong>Bullets</strong>
-            <span>${bullets.length}</span>
+            <span>${timing.cardCount} cards · ${bullets.length} bullets</span>
           </div>
           <div class="info-row">
             <strong>Target</strong>
@@ -4851,7 +5083,7 @@ function renderScriptComposer({
         <div class="field">
           <label for="${escapeHtml(bulletsId)}">Rehearsal Bullets</label>
           <textarea id="${escapeHtml(bulletsId)}" name="${escapeHtml(bulletsName)}" data-bullets="true">${escapeHtml(bulletValue)}</textarea>
-          <p class="field-hint">One bullet per line. Add a trailing //5s, //1m, or //1:30 to set an auto pacing duration for a cue.</p>
+          <p class="field-hint">One bullet per line. Wrap related bullets in { and } to show them on one cue card. Add a trailing //5s, //1m, or //1:30 to time a cue.</p>
         </div>
       </div>
     </details>
@@ -6747,6 +6979,7 @@ function openRehearsal() {
   state.rehearsal.speechId = speech.id;
   state.rehearsal.versionId = version.id;
   state.rehearsal.index = 0;
+  state.rehearsal.timingCapture = useIntro ? null : createRehearsalTimingCapture(timing, 0);
   state.rehearsal.startedAt = useIntro ? 0 : Date.now();
   state.rehearsal.cardStartedAt = 0;
   state.rehearsal.introEndsAt = useIntro ? Date.now() + REHEARSAL_INTRO_DURATION_MS : 0;
@@ -6759,6 +6992,7 @@ function openRehearsal() {
 function closeRehearsal() {
   clearRehearsalTickTimer();
   state.rehearsal.startedAt = 0;
+  state.rehearsal.timingCapture = null;
   state.rehearsal.cardStartedAt = 0;
   state.rehearsal.introEndsAt = 0;
   state.rehearsal.paused = false;
@@ -6929,24 +7163,50 @@ function getRehearsalVersion() {
   return { speech, version };
 }
 
+function renderManualRehearsalTimingReview(timing) {
+  const capture = state.rehearsal.timingCapture;
+  const totalLabel = formatDurationLabel(getManualRehearsalCaptureTotalMs(capture) / 1000);
+  const cardLabel = formatCountLabel(timing.cardCount, "card");
+  const canSave = canSaveManualRehearsalTiming(timing, capture);
+  const status = capture?.status
+    ? `<p class="helper-copy" data-tone="${escapeHtml(capture.tone || "")}">${escapeHtml(capture.status)}</p>`
+    : "";
+
+  return `
+    <div class="rehearsal-timing-review">
+      <strong>Timing captured</strong>
+      <p>${canSave
+        ? `This manual run took ${escapeHtml(totalLabel)} across ${escapeHtml(cardLabel)}. Save it for Auto pacing on this version?`
+        : "Start from the first cue and move forward through every cue to save a complete timing pass."}</p>
+      ${status}
+      <div class="button-row">
+        ${canSave ? `<button class="primary-button" type="button" data-rehearsal-timing-action="save" ${capture?.saving ? "disabled" : ""}>${capture?.saving ? "Saving..." : "Save Timing"}</button>` : ""}
+        <button class="ghost-button" type="button" data-rehearsal-timing-action="discard" ${capture?.saving ? "disabled" : ""}>Discard</button>
+      </div>
+    </div>
+  `;
+}
+
 function renderRehearsalScreen(options = {}) {
   const { resetAutoTimer = false } = options;
   const { speech, version } = getRehearsalVersion();
   const bullets = version?.rehearsalBullets || [];
 
-  if (!speech || !version || !bullets.length) {
+  const timing = getRehearsalTiming(version, bullets);
+
+  if (!speech || !version || !timing.cardCount) {
     closeRehearsal();
     return;
   }
 
-  const index = Math.max(0, Math.min(state.rehearsal.index, bullets.length - 1));
+  const index = Math.max(0, Math.min(state.rehearsal.index, timing.cardCount - 1));
   state.rehearsal.index = index;
 
-  const timing = getRehearsalTiming(version, bullets);
   const cues = timing.cues || [];
-  const progress = ((index + 1) / bullets.length) * 100;
-  const nearEnd = bullets.length > 1 && index >= Math.max(1, bullets.length - Math.ceil(bullets.length * 0.25));
+  const progress = ((index + 1) / timing.cardCount) * 100;
+  const nearEnd = timing.cardCount > 1 && index >= Math.max(1, timing.cardCount - Math.ceil(timing.cardCount * 0.25));
   const introActive = isRehearsalIntroActive();
+  const reviewActive = Boolean(state.rehearsal.timingCapture?.reviewOpen);
   const stageCopy = introActive
     ? getRehearsalIntroLabel(timing)
     : (cues[index]?.text || bullets[index]);
@@ -6956,13 +7216,19 @@ function renderRehearsalScreen(options = {}) {
     extraClassName: "fullscreen-mode-toggle",
   });
   elements.fullscreenBody.dataset.introActive = String(introActive);
-  elements.fullscreenBullet.dataset.cueSize = introActive ? "intro" : getRehearsalCueSize(stageCopy);
-  elements.fullscreenBullet.textContent = stageCopy;
+  elements.fullscreenBody.dataset.reviewActive = String(reviewActive);
+  elements.fullscreenBullet.dataset.cueSize = reviewActive ? "review" : (introActive ? "intro" : getRehearsalCueSize(stageCopy));
+  if (reviewActive) {
+    elements.fullscreenBullet.innerHTML = renderManualRehearsalTimingReview(timing);
+  } else {
+    elements.fullscreenBullet.textContent = stageCopy;
+  }
   elements.fullscreenBullet.removeAttribute("style");
   elements.fullscreenProgress.style.width = `${progress}%`;
   elements.fullscreenProgress.dataset.nearEnd = String(nearEnd);
-  elements.prevBulletButton.disabled = introActive || index === 0;
-  elements.nextBulletButton.disabled = introActive || index === bullets.length - 1;
+  elements.prevBulletButton.disabled = introActive || reviewActive || index === 0;
+  elements.nextBulletButton.disabled = introActive || reviewActive || (getEffectiveRehearsalMode(timing) === "auto" && index === timing.cardCount - 1);
+  elements.nextBulletButton.textContent = getEffectiveRehearsalMode(timing) === "manual" && index === timing.cardCount - 1 ? "Finish" : "Next";
   syncRehearsalPauseButton(timing);
   scheduleFullscreenCueFit();
   syncRehearsalTickTimer({ timing, reset: resetAutoTimer });
@@ -7428,17 +7694,94 @@ function moveFocusVersion(versionId, direction) {
 function nextRehearsalBullet() {
   const { version } = getRehearsalVersion();
   const bullets = version?.rehearsalBullets || [];
-  if (!bullets.length || isRehearsalIntroActive()) return;
-  state.rehearsal.index = Math.min(state.rehearsal.index + 1, bullets.length - 1);
+  const timing = getRehearsalTiming(version, bullets);
+  if (!timing.cardCount || isRehearsalIntroActive() || state.rehearsal.timingCapture?.reviewOpen) return;
+
+  const effectiveMode = getEffectiveRehearsalMode(timing);
+  const currentIndex = Math.max(0, Math.min(state.rehearsal.index, timing.cardCount - 1));
+
+  if (effectiveMode === "manual") {
+    if (!state.rehearsal.timingCapture) {
+      startManualRehearsalTimingCapture(timing);
+    }
+    recordManualRehearsalCardDuration(timing, currentIndex);
+
+    if (currentIndex >= timing.cardCount - 1) {
+      if (state.rehearsal.timingCapture) {
+        state.rehearsal.timingCapture.reviewOpen = true;
+      }
+      renderRehearsalScreen({ resetAutoTimer: false });
+      return;
+    }
+  }
+
+  state.rehearsal.index = Math.min(currentIndex + 1, timing.cardCount - 1);
   renderRehearsalScreen({ resetAutoTimer: true });
 }
 
 function prevRehearsalBullet() {
   const { version } = getRehearsalVersion();
   const bullets = version?.rehearsalBullets || [];
-  if (!bullets.length || isRehearsalIntroActive()) return;
+  const timing = getRehearsalTiming(version, bullets);
+  if (!timing.cardCount || isRehearsalIntroActive() || state.rehearsal.timingCapture?.reviewOpen) return;
   state.rehearsal.index = Math.max(state.rehearsal.index - 1, 0);
+  if (getEffectiveRehearsalMode(timing) === "manual") {
+    trimManualRehearsalCaptureForIndex(state.rehearsal.index);
+  }
   renderRehearsalScreen({ resetAutoTimer: true });
+}
+
+async function saveManualRehearsalTiming() {
+  const { speech, version } = getRehearsalVersion();
+  const timing = getRehearsalTiming(version, version?.rehearsalBullets || []);
+  const capture = state.rehearsal.timingCapture;
+
+  if (!speech || !version || !canSaveManualRehearsalTiming(timing, capture) || capture.saving) {
+    return;
+  }
+
+  capture.saving = true;
+  capture.status = "";
+  capture.tone = "";
+  renderRehearsalScreen({ resetAutoTimer: false });
+
+  const payload = {
+    version: 1,
+    capturedAt: new Date().toISOString(),
+    cardCount: timing.cardCount,
+    cardTexts: [...capture.signature],
+    durationsMs: Array.from(
+      { length: timing.cardCount },
+      (_, index) => Math.max(REHEARSAL_MIN_CARD_SECONDS * 1000, Math.round(Number(capture.durationsMs[index]) || 0)),
+    ),
+    totalMs: Math.round(getManualRehearsalCaptureTotalMs(capture)),
+  };
+
+  try {
+    const { error } = await db
+      .from("brajesh_speech_versions")
+      .update({ rehearsal_timing: payload })
+      .eq("id", version.id);
+
+    if (error) throw error;
+
+    version.rehearsalTiming = payload;
+    state.rehearsal.mode = "auto";
+    setPageStatus("Manual rehearsal timing saved for Auto.", "ok");
+    closeRehearsal();
+    renderApp();
+  } catch (error) {
+    capture.saving = false;
+    capture.status = error.message || "Could not save rehearsal timing.";
+    capture.tone = "error";
+    renderRehearsalScreen({ resetAutoTimer: false });
+  }
+}
+
+function discardManualRehearsalTiming() {
+  setPageStatus("Manual rehearsal timing discarded.");
+  closeRehearsal();
+  renderApp();
 }
 
 function handleFullscreenBodyClick(event) {
@@ -7844,6 +8187,18 @@ elements.copyEditorButton.addEventListener("click", () => {
 elements.editorForm.addEventListener("submit", saveEditor);
 
 elements.fullscreenRehearsal.addEventListener("click", (event) => {
+  const timingActionButton = event.target.closest("[data-rehearsal-timing-action]");
+  if (timingActionButton) {
+    event.stopPropagation();
+    const action = timingActionButton.dataset.rehearsalTimingAction;
+    if (action === "save") {
+      void saveManualRehearsalTiming();
+    } else {
+      discardManualRehearsalTiming();
+    }
+    return;
+  }
+
   const modeButton = event.target.closest("[data-rehearsal-mode]");
   if (!modeButton) return;
 
@@ -7938,12 +8293,12 @@ document.addEventListener("keydown", (event) => {
       return;
     }
 
-    if (event.key === " " || event.key === "ArrowRight") {
+    if (event.key === " " || event.key === "ArrowRight" || event.key === "PageDown" || event.key === "Enter") {
       event.preventDefault();
       nextRehearsalBullet();
     }
 
-    if (event.key === "ArrowLeft") {
+    if (event.key === "ArrowLeft" || event.key === "PageUp" || event.key === "Backspace") {
       event.preventDefault();
       prevRehearsalBullet();
     }

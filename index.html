@@ -1613,10 +1613,17 @@
       color: #ffe5a6;
     }
 
+    .rehearsal-time-chip[data-timing="learned"] {
+      border-color: rgba(136, 218, 176, 0.42);
+      background: rgba(136, 218, 176, 0.14);
+      color: #c8f5d8;
+    }
+
     .bullet-card p {
       margin: 0;
       color: var(--text);
       line-height: 1.5;
+      white-space: pre-wrap;
     }
 
     .timeline-dot {
@@ -2815,6 +2822,13 @@
       box-shadow: 0 12px 28px rgba(47, 82, 126, 0.26);
     }
 
+    .fullscreen-stage-chip[data-chip="progress"] {
+      min-width: max(84px, 7ch);
+      border-color: rgba(136, 218, 176, 0.34);
+      background: rgba(136, 218, 176, 0.12);
+      color: #d8f8e2;
+    }
+
     .fullscreen-bullet {
       max-width: 18ch;
       max-height: 52vh;
@@ -2825,6 +2839,7 @@
       line-height: 1.16;
       letter-spacing: -0.03em;
       overflow-wrap: anywhere;
+      white-space: pre-wrap;
     }
 
     .fullscreen-bullet[data-cue-size="medium"] {
@@ -2863,6 +2878,45 @@
       background: linear-gradient(180deg, rgba(242, 200, 118, 0.32), rgba(159, 113, 41, 0.24));
       color: #fff1ce;
       box-shadow: 0 12px 28px rgba(121, 84, 31, 0.24);
+    }
+
+    .fullscreen-body[data-review-active="true"] .fullscreen-stage {
+      border-color: rgba(136, 218, 176, 0.34);
+      background:
+        linear-gradient(180deg, rgba(136, 218, 176, 0.12), rgba(123, 183, 255, 0.05)),
+        rgba(14, 20, 28, 0.82);
+    }
+
+    .fullscreen-body[data-review-active="true"] .fullscreen-bullet {
+      max-width: min(620px, 88vw);
+      font-family: var(--sans);
+      font-size: 1rem;
+      line-height: 1.45;
+      letter-spacing: 0;
+      white-space: normal;
+    }
+
+    .rehearsal-timing-review {
+      display: grid;
+      gap: 18px;
+      justify-items: center;
+      text-align: center;
+    }
+
+    .rehearsal-timing-review strong {
+      font-family: var(--serif);
+      font-size: clamp(1.8rem, 4vw, 3.1rem);
+      line-height: 1.05;
+    }
+
+    .rehearsal-timing-review p {
+      margin: 0;
+      color: #d8dde5;
+      max-width: 46ch;
+    }
+
+    .rehearsal-timing-review .button-row {
+      justify-content: center;
     }
 
     .teleprompter {
@@ -3532,6 +3586,7 @@
       <div class="fullscreen-controls">
         <div class="fullscreen-mobile-status" aria-hidden="true">
           <span class="fullscreen-stage-chip" data-chip="card" id="mobileFullscreenCardTimer">Manual</span>
+          <span class="fullscreen-stage-chip" data-chip="progress" id="mobileFullscreenCardProgress">1/1</span>
           <span class="fullscreen-stage-chip" id="mobileFullscreenElapsedTimer">0:00</span>
         </div>
         <div id="fullscreenModeToggle"></div>
@@ -3548,6 +3603,7 @@
       <div class="fullscreen-stage">
         <div class="fullscreen-stage-head" aria-hidden="true">
           <span class="fullscreen-stage-chip" data-chip="card" id="fullscreenCardTimer">Manual</span>
+          <span class="fullscreen-stage-chip" data-chip="progress" id="fullscreenCardProgress">1/1</span>
           <span class="fullscreen-stage-chip" id="fullscreenElapsedTimer">0:00</span>
         </div>
         <div class="fullscreen-bullet" id="fullscreenBullet">Bullet</div>
@@ -3560,7 +3616,7 @@
           <div class="progress-fill" id="fullscreenProgress"></div>
         </div>
       </div>
-      <p class="fullscreen-hint">Left tap back · right tap forward · Space / arrows</p>
+      <p class="fullscreen-hint">Left tap back · right tap forward · Space / arrows / clicker</p>
     </div>
   </section>
 
@@ -3597,6 +3653,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260604a"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260608a"></script>
 </body>
 </html>
