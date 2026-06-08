@@ -5112,8 +5112,7 @@ function renderRehearsalBulletComposer({
           </div>
           <span class="meta-chip">${bulletCount} ${bulletCount === 1 ? "bullet" : "bullets"}</span>
         </div>
-        <div class="field bullet-drafting-field">
-          <label for="${escapeHtml(bulletsId)}">Rehearsal Bullets</label>
+        <div class="bullet-drafting-field">
           <textarea id="${escapeHtml(bulletsId)}" name="${escapeHtml(bulletsName)}" data-bullets="true">${escapeHtml(bulletValue)}</textarea>
           <p class="field-hint">One bullet per line. Wrap related bullets in { and } to show them on one cue card. Add a trailing //5s, //1m, or //1:30 to time a cue.</p>
         </div>

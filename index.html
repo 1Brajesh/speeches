@@ -2544,6 +2544,17 @@
       padding-right: 4px;
     }
 
+    .editor-shell[data-layout="studio"][data-entry-point="rehearsal-bullets"] #editorFields {
+      overflow: hidden;
+      align-content: stretch;
+    }
+
+    .editor-shell[data-layout="studio"][data-entry-point="rehearsal-bullets"] .studio-layout {
+      min-height: 0;
+      height: 100%;
+      align-content: stretch;
+    }
+
     .editor-shell[data-layout="modal"] #editorFields {
       display: grid;
       gap: 18px;
@@ -2672,13 +2683,14 @@
       grid-template-columns: minmax(320px, 1fr) minmax(520px, 2fr);
       gap: 18px;
       align-items: stretch;
-      min-height: min(680px, 68vh);
+      min-height: 0;
+      height: 100%;
     }
 
     .bullet-drafting-panel,
     .speech-reference-panel {
       min-height: 0;
-      align-content: start;
+      overflow: hidden;
     }
 
     .bullet-drafting-panel {
@@ -2686,14 +2698,18 @@
     }
 
     .bullet-drafting-field {
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      gap: 8px;
       min-height: 0;
     }
 
     .editor-shell[data-layout="studio"] .bullet-drafting-field textarea[data-bullets="true"] {
-      min-height: 420px;
+      min-height: 0;
       height: 100%;
       resize: none;
       overflow: auto;
+      overscroll-behavior: contain;
     }
 
     .speech-reference-panel {
@@ -2703,6 +2719,7 @@
     .speech-reference-body {
       min-height: 0;
       overflow: auto;
+      overscroll-behavior: contain;
       padding: 18px;
       border-radius: 18px;
       border: 1px solid rgba(255, 255, 255, 0.08);
@@ -3484,8 +3501,17 @@
         width: 100%;
       }
 
+      .editor-shell[data-layout="studio"][data-entry-point="rehearsal-bullets"] #editorFields {
+        overflow: auto;
+      }
+
+      .editor-shell[data-layout="studio"][data-entry-point="rehearsal-bullets"] .studio-layout {
+        height: auto;
+      }
+
       .bullet-drafting-workspace {
         grid-template-columns: 1fr;
+        height: auto;
         min-height: 0;
       }
 
@@ -3747,6 +3773,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260608b"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260608c"></script>
 </body>
 </html>
