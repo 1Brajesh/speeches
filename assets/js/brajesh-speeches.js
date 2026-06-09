@@ -7329,16 +7329,14 @@ function renderFullscreenCueCard(cue) {
   }
 
   return `
-    <div>
-      <ul class="fullscreen-cue-list">
-        ${lines.map((line) => `
-          <li class="fullscreen-cue-item">
-            <span class="fullscreen-cue-dash" aria-hidden="true">-</span>
-            <span>${displayText(line)}</span>
-          </li>
-        `).join("")}
-      </ul>
-    </div>
+    <ul class="fullscreen-cue-list">
+      ${lines.map((line) => `
+        <li class="fullscreen-cue-item">
+          <span class="fullscreen-cue-dash" aria-hidden="true">-</span>
+          <span>${displayText(line)}</span>
+        </li>
+      `).join("")}
+    </ul>
   `;
 }
 
