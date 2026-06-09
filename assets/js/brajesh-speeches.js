@@ -7319,10 +7319,13 @@ function renderManualRehearsalTimingReview(timing) {
   `;
 }
 
-function renderFullscreenCueCard(cue) {
+function renderFullscreenCueCard(cue, nextCue = null) {
   const lines = Array.isArray(cue?.lines) && cue.lines.length
     ? cue.lines
     : String(cue?.text || "").split("\n").map((line) => line.trim()).filter(Boolean);
+  const nextLine = Array.isArray(nextCue?.lines) && nextCue.lines.length
+    ? cleanText(nextCue.lines[0])
+    : cleanText(String(nextCue?.text || "").split("\n")[0] || "");
 
   if (!lines.length) {
     return "";
@@ -7336,6 +7339,12 @@ function renderFullscreenCueCard(cue) {
           <span>${displayText(line)}</span>
         </li>
       `).join("")}
+      ${nextLine ? `
+        <li class="fullscreen-cue-item" data-next-cue="true">
+          <span class="fullscreen-cue-dash" aria-hidden="true">-</span>
+          <span>${displayText(nextLine)}</span>
+        </li>
+      ` : ""}
     </ul>
   `;
 }
@@ -7376,7 +7385,7 @@ function renderRehearsalScreen(options = {}) {
   } else if (introActive) {
     elements.fullscreenBullet.textContent = stageCopy;
   } else {
-    elements.fullscreenBullet.innerHTML = renderFullscreenCueCard(cues[index]);
+    elements.fullscreenBullet.innerHTML = renderFullscreenCueCard(cues[index], cues[index + 1]);
   }
   elements.fullscreenBullet.removeAttribute("style");
   elements.fullscreenProgress.style.width = `${progress}%`;
