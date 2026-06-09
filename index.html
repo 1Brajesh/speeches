@@ -2926,9 +2926,10 @@
     }
 
     .fullscreen-body:not([data-intro-active="true"]):not([data-review-active="true"]) .fullscreen-bullet {
-      margin-top: clamp(36px, 5vh, 64px);
+      margin-top: 0;
       align-self: start;
       text-align: left;
+      transform: translateY(clamp(-180px, -13vh, -110px));
     }
 
     .fullscreen-cue-list {
