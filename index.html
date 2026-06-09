@@ -2842,7 +2842,7 @@
     .fullscreen-stage {
       width: min(1040px, 100%);
       min-height: min(58vh, 560px);
-      padding: clamp(72px, 9vh, 104px) clamp(24px, 5vw, 48px) clamp(22px, 4vh, 40px);
+      padding: clamp(28px, 6vw, 52px);
       border-radius: 34px;
       border: 1px solid rgba(255, 255, 255, 0.08);
       background:
@@ -2851,7 +2851,7 @@
       box-shadow: 0 30px 90px rgba(0, 0, 0, 0.34);
       position: relative;
       display: grid;
-      place-items: start center;
+      place-items: center;
       text-align: center;
     }
 
@@ -2900,12 +2900,12 @@
 
     .fullscreen-bullet {
       max-width: 18ch;
-      max-height: none;
-      overflow: hidden;
-      padding: 0;
+      max-height: 52vh;
+      overflow: auto;
+      padding: 0.08em 0.04em 0.18em;
       font-family: var(--serif);
       font-size: clamp(2rem, 4vw, 4.5rem);
-      line-height: 1.08;
+      line-height: 1.16;
       letter-spacing: -0.03em;
       overflow-wrap: anywhere;
       white-space: pre-wrap;
@@ -2914,14 +2914,14 @@
     .fullscreen-bullet[data-cue-size="medium"] {
       max-width: min(34ch, 82vw);
       font-size: clamp(1.85rem, 3.45vw, 3.65rem);
-      line-height: 1.07;
+      line-height: 1.14;
       letter-spacing: -0.02em;
     }
 
     .fullscreen-bullet[data-cue-size="long"] {
       max-width: min(46ch, 86vw);
       font-size: clamp(1.55rem, 2.8vw, 3rem);
-      line-height: 1.08;
+      line-height: 1.16;
       letter-spacing: 0;
     }
 
@@ -2931,7 +2931,7 @@
 
     .fullscreen-cue-list {
       display: grid;
-      gap: 0.22em;
+      gap: 0.38em;
       margin: 0;
       padding: 0;
       list-style: none;
@@ -2949,8 +2949,8 @@
     }
 
     .fullscreen-next-cue {
-      margin-top: 0.48em;
-      padding-top: 0.22em;
+      margin-top: 0.82em;
+      padding-top: 0.42em;
       border-top: 1px solid rgba(242, 200, 118, 0.22);
       color: #f2c876;
       font-style: italic;
@@ -2964,7 +2964,6 @@
     }
 
     .fullscreen-body[data-intro-active="true"] .fullscreen-stage {
-      place-items: center;
       border-color: rgba(242, 200, 118, 0.32);
       background:
         linear-gradient(180deg, rgba(242, 200, 118, 0.13), rgba(123, 183, 255, 0.06)),
@@ -2982,7 +2981,6 @@
     }
 
     .fullscreen-body[data-review-active="true"] .fullscreen-stage {
-      place-items: center;
       border-color: rgba(136, 218, 176, 0.34);
       background:
         linear-gradient(180deg, rgba(136, 218, 176, 0.12), rgba(123, 183, 255, 0.05)),
@@ -3783,6 +3781,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260608g"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260608f"></script>
 </body>
 </html>

@@ -919,20 +919,20 @@ function rehearsalCueFitProfile(cueSize, viewportWidth, viewportHeight) {
   }
 
   if (mobilePortrait) {
-    if (cueSize === "short") return { widthRatio: 0.96, minFont: 30, maxFont: 72, lineHeight: 1.04 };
-    if (cueSize === "medium") return { widthRatio: 0.98, minFont: 26, maxFont: 56, lineHeight: 1.05 };
-    return { widthRatio: 0.99, minFont: 21, maxFont: 46, lineHeight: 1.06 };
+    if (cueSize === "short") return { widthRatio: 0.9, minFont: 36, maxFont: 74, lineHeight: 1.06 };
+    if (cueSize === "medium") return { widthRatio: 0.94, minFont: 30, maxFont: 58, lineHeight: 1.07 };
+    return { widthRatio: 0.96, minFont: 24, maxFont: 48, lineHeight: 1.08 };
   }
 
   if (mobileLandscape) {
-    if (cueSize === "short") return { widthRatio: 0.94, minFont: 30, maxFont: 68, lineHeight: 1.04 };
-    if (cueSize === "medium") return { widthRatio: 0.98, minFont: 25, maxFont: 54, lineHeight: 1.05 };
-    return { widthRatio: 0.99, minFont: 20, maxFont: 40, lineHeight: 1.07 };
+    if (cueSize === "short") return { widthRatio: 0.82, minFont: 36, maxFont: 72, lineHeight: 1.06 };
+    if (cueSize === "medium") return { widthRatio: 0.94, minFont: 30, maxFont: 58, lineHeight: 1.08 };
+    return { widthRatio: 0.96, minFont: 22, maxFont: 42, lineHeight: 1.1 };
   }
 
-  if (cueSize === "short") return { widthRatio: 0.86, minFont: 34, maxFont: 80, lineHeight: 1.04 };
-  if (cueSize === "medium") return { widthRatio: 0.94, minFont: 28, maxFont: 64, lineHeight: 1.05 };
-  return { widthRatio: 0.98, minFont: 22, maxFont: 52, lineHeight: 1.07 };
+  if (cueSize === "short") return { widthRatio: 0.68, minFont: 42, maxFont: 82, lineHeight: 1.08 };
+  if (cueSize === "medium") return { widthRatio: 0.82, minFont: 34, maxFont: 66, lineHeight: 1.1 };
+  return { widthRatio: 0.9, minFont: 26, maxFont: 54, lineHeight: 1.12 };
 }
 
 function fitFullscreenCueText() {
@@ -948,11 +948,8 @@ function fitFullscreenCueText() {
   const stageStyle = window.getComputedStyle(stage);
   const paddingX = Number.parseFloat(stageStyle.paddingLeft) + Number.parseFloat(stageStyle.paddingRight);
   const paddingY = Number.parseFloat(stageStyle.paddingTop) + Number.parseFloat(stageStyle.paddingBottom);
-  const stageHead = stage.querySelector(".fullscreen-stage-head");
-  const stageHeadBottom = stageHead ? stageHead.offsetTop + stageHead.offsetHeight : 0;
-  const reservedTop = Math.max(Number.parseFloat(stageStyle.paddingTop), stageHeadBottom + 18);
   const availableWidth = Math.max(120, stage.clientWidth - paddingX);
-  const availableHeight = Math.max(120, stage.clientHeight - reservedTop - Number.parseFloat(stageStyle.paddingBottom));
+  const availableHeight = Math.max(120, stage.clientHeight - paddingY);
   const profile = rehearsalCueFitProfile(cueSize, viewportWidth, viewportHeight);
   const targetWidth = Math.max(120, Math.floor(availableWidth * profile.widthRatio));
 
@@ -963,7 +960,7 @@ function fitFullscreenCueText() {
   bullet.style.transform = "";
 
   let low = profile.minFont;
-  let high = Math.min(profile.maxFont, Math.max(profile.minFont, availableHeight * 0.34));
+  let high = Math.min(profile.maxFont, Math.max(profile.minFont, availableHeight * 0.42));
   let best = low;
 
   for (let index = 0; index < 8; index += 1) {
@@ -7344,7 +7341,7 @@ function renderFullscreenCueCard(cue, nextCue = null) {
           </li>
         `).join("")}
       </ul>
-      ${nextLine ? `<div class="fullscreen-next-cue"><span aria-hidden="true">-</span> ${displayText(nextLine)}</div>` : ""}
+      ${nextLine ? `<div class="fullscreen-next-cue">Next: ${displayText(nextLine)}</div>` : ""}
     </div>
   `;
 }
