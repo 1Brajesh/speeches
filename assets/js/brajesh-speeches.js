@@ -948,8 +948,14 @@ function fitFullscreenCueText() {
   const stageStyle = window.getComputedStyle(stage);
   const paddingX = Number.parseFloat(stageStyle.paddingLeft) + Number.parseFloat(stageStyle.paddingRight);
   const paddingY = Number.parseFloat(stageStyle.paddingTop) + Number.parseFloat(stageStyle.paddingBottom);
+  const bulletStyle = window.getComputedStyle(bullet);
+  const cueGap = Number.parseFloat(bulletStyle.marginTop) || 0;
+  const normalCue = elements.fullscreenBody.dataset.introActive !== "true"
+    && elements.fullscreenBody.dataset.reviewActive !== "true";
+  const stageHead = normalCue ? stage.querySelector(".fullscreen-stage-head") : null;
+  const reservedHeight = stageHead ? stageHead.offsetHeight + cueGap : 0;
   const availableWidth = Math.max(120, stage.clientWidth - paddingX);
-  const availableHeight = Math.max(120, stage.clientHeight - paddingY);
+  const availableHeight = Math.max(120, stage.clientHeight - paddingY - reservedHeight);
   const profile = rehearsalCueFitProfile(cueSize, viewportWidth, viewportHeight);
   const targetWidth = Math.max(120, Math.floor(availableWidth * profile.widthRatio));
 

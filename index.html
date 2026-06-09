@@ -2855,6 +2855,11 @@
       text-align: center;
     }
 
+    .fullscreen-body:not([data-intro-active="true"]):not([data-review-active="true"]) .fullscreen-stage {
+      grid-template-rows: auto minmax(0, 1fr);
+      place-items: stretch;
+    }
+
     .fullscreen-stage-head {
       position: absolute;
       top: clamp(18px, 3vw, 28px);
@@ -2864,6 +2869,11 @@
       justify-content: space-between;
       gap: 12px;
       pointer-events: none;
+    }
+
+    .fullscreen-body:not([data-intro-active="true"]):not([data-review-active="true"]) .fullscreen-stage-head {
+      position: static;
+      width: 100%;
     }
 
     .fullscreen-stage-chip {
@@ -2926,10 +2936,12 @@
     }
 
     .fullscreen-body:not([data-intro-active="true"]):not([data-review-active="true"]) .fullscreen-bullet {
-      margin-top: 0;
+      margin-top: 28px;
       align-self: start;
+      justify-self: center;
       text-align: left;
-      transform: translateY(-75px);
+      transform: none;
+      white-space: normal;
     }
 
     .fullscreen-cue-list {
@@ -3785,6 +3797,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260609a"></script>
+  <script type="module" src="./assets/js/brajesh-speeches.js?v=20260609b"></script>
 </body>
 </html>
