@@ -165,6 +165,11 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
   - `./assets/js/brajesh-speeches.js?v=20260609c`
 - If future speeches JS changes appear missing in production, bump that query-string version.
 
+## Tests
+
+- Run `npm run check` for the local syntax and regression checks.
+- The small Node test suite guards cache-bust consistency, fullscreen rehearsal cue layout, cue fit sizing, and remote navigation wiring.
+
 ## Useful Starting Point
 
 For Codex rehydration, read:

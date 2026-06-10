@@ -1,0 +1,6 @@
+{
+  "scripts": {
+    "check": "node --check assets/js/brajesh-speeches.js && node --test tests/*.test.mjs",
+    "test": "node --test tests/*.test.mjs"
+  }
+}
