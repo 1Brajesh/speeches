@@ -21,6 +21,7 @@ const SCRIPT_PARAGRAPH_SPACING_DEFAULT = 1.2;
 const REHEARSAL_MIN_CARD_SECONDS = 1;
 const REHEARSAL_TIMER_TICK_MS = 250;
 const REHEARSAL_INTRO_DURATION_MS = 1600;
+const REHEARSAL_REMOTE_ADVANCE_THROTTLE_MS = 450;
 const REHEARSAL_BULLET_SCROLL_STORAGE_PREFIX = "brajesh-speeches:rehearsal-bullet-scroll:";
 const TELEPROMPTER_DEFAULT_WPM = 130;
 const TELEPROMPTER_MIN_DURATION_MS = 30000;
@@ -95,6 +96,12 @@ const state = {
     introEndsAt: 0,
     paused: false,
     pausedAt: 0,
+    remoteAdvanceAt: 0,
+    scrollX: 0,
+    scrollY: 0,
+    returnScrollX: 0,
+    returnScrollY: 0,
+    restoringScroll: false,
   },
   teleprompter: {
     speechId: null,
@@ -7123,6 +7130,8 @@ function openRehearsal() {
   state.rehearsal.introEndsAt = useIntro ? Date.now() + REHEARSAL_INTRO_DURATION_MS : 0;
   state.rehearsal.paused = false;
   state.rehearsal.pausedAt = 0;
+  state.rehearsal.remoteAdvanceAt = 0;
+  resetRehearsalScrollAnchor();
   elements.fullscreenRehearsal.hidden = false;
   renderRehearsalScreen({ resetAutoTimer: true });
 }
@@ -7135,7 +7144,9 @@ function closeRehearsal() {
   state.rehearsal.introEndsAt = 0;
   state.rehearsal.paused = false;
   state.rehearsal.pausedAt = 0;
+  state.rehearsal.remoteAdvanceAt = 0;
   elements.fullscreenRehearsal.hidden = true;
+  restoreRehearsalScrollAnchor({ returnToOriginal: true });
 }
 
 function getTeleprompterVersion() {
@@ -7901,6 +7912,65 @@ function prevRehearsalBullet() {
   renderRehearsalScreen({ resetAutoTimer: true });
 }
 
+function moveRehearsalFromRemote(direction, options = {}) {
+  if (elements.fullscreenRehearsal.hidden) return false;
+
+  const { event = null, throttle = false } = options;
+  event?.preventDefault?.();
+
+  if (throttle) {
+    const now = Date.now();
+    if (now - state.rehearsal.remoteAdvanceAt < REHEARSAL_REMOTE_ADVANCE_THROTTLE_MS) {
+      return true;
+    }
+    state.rehearsal.remoteAdvanceAt = now;
+  }
+
+  if (direction > 0) {
+    nextRehearsalBullet();
+  } else if (direction < 0) {
+    prevRehearsalBullet();
+  }
+
+  return true;
+}
+
+function resetRehearsalScrollAnchor() {
+  const originalX = window.scrollX || 0;
+  const originalY = window.scrollY || 0;
+  const maxScrollY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+  const anchorY = maxScrollY >= 2
+    ? Math.max(1, Math.min(maxScrollY - 1, originalY))
+    : originalY;
+
+  state.rehearsal.returnScrollX = originalX;
+  state.rehearsal.returnScrollY = originalY;
+  state.rehearsal.scrollX = originalX;
+  state.rehearsal.scrollY = anchorY;
+  state.rehearsal.restoringScroll = false;
+
+  if (anchorY !== originalY) {
+    state.rehearsal.restoringScroll = true;
+    window.scrollTo({ left: originalX, top: anchorY, behavior: "auto" });
+    window.requestAnimationFrame(() => {
+      state.rehearsal.restoringScroll = false;
+    });
+  }
+}
+
+function restoreRehearsalScrollAnchor(options = {}) {
+  const { returnToOriginal = false } = options;
+  state.rehearsal.restoringScroll = true;
+  window.scrollTo({
+    left: returnToOriginal ? (state.rehearsal.returnScrollX || 0) : (state.rehearsal.scrollX || 0),
+    top: returnToOriginal ? (state.rehearsal.returnScrollY || 0) : (state.rehearsal.scrollY || 0),
+    behavior: "auto",
+  });
+  window.requestAnimationFrame(() => {
+    state.rehearsal.restoringScroll = false;
+  });
+}
+
 async function saveManualRehearsalTiming() {
   const { speech, version } = getRehearsalVersion();
   const timing = getRehearsalTiming(version, version?.rehearsalBullets || []);
@@ -7971,6 +8041,31 @@ function handleFullscreenBodyClick(event) {
   }
 
   nextRehearsalBullet();
+}
+
+function handleFullscreenRehearsalWheel(event) {
+  if (elements.fullscreenRehearsal.hidden) return;
+
+  const deltaY = Number(event.deltaY) || 0;
+  const deltaX = Number(event.deltaX) || 0;
+  const dominantDelta = Math.abs(deltaY) >= Math.abs(deltaX) ? deltaY : deltaX;
+
+  if (Math.abs(dominantDelta) < 1) {
+    event.preventDefault();
+    return;
+  }
+
+  moveRehearsalFromRemote(dominantDelta > 0 ? 1 : -1, { event, throttle: true });
+}
+
+function handleFullscreenRehearsalScrollFallback() {
+  if (elements.fullscreenRehearsal.hidden || state.rehearsal.restoringScroll) return;
+
+  const deltaY = (window.scrollY || 0) - (state.rehearsal.scrollY || 0);
+  if (Math.abs(deltaY) < 0.5) return;
+
+  moveRehearsalFromRemote(deltaY > 0 ? 1 : -1, { throttle: true });
+  restoreRehearsalScrollAnchor();
 }
 
 function renderApp() {
@@ -8385,6 +8480,8 @@ elements.fullscreenRehearsal.addEventListener("click", (event) => {
 });
 
 elements.fullscreenBody.addEventListener("click", handleFullscreenBodyClick);
+elements.fullscreenRehearsal.addEventListener("wheel", handleFullscreenRehearsalWheel, { passive: false });
+window.addEventListener("scroll", handleFullscreenRehearsalScrollFallback, true);
 
 elements.nextBulletButton.addEventListener("click", (event) => {
   event.stopPropagation();
@@ -8471,14 +8568,13 @@ document.addEventListener("keydown", (event) => {
       return;
     }
 
-    if (event.key === " " || event.key === "ArrowRight" || event.key === "PageDown" || event.key === "Enter") {
-      event.preventDefault();
-      nextRehearsalBullet();
+    if (event.key === " " || event.key === "ArrowRight" || event.key === "ArrowDown" || event.key === "PageDown" || event.key === "Enter") {
+      moveRehearsalFromRemote(1, { event });
+      return;
     }
 
-    if (event.key === "ArrowLeft" || event.key === "PageUp" || event.key === "Backspace") {
-      event.preventDefault();
-      prevRehearsalBullet();
+    if (event.key === "ArrowLeft" || event.key === "ArrowUp" || event.key === "PageUp" || event.key === "Backspace") {
+      moveRehearsalFromRemote(-1, { event });
     }
 
     return;
