@@ -16,6 +16,8 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
   - speech manager page shell, styles, and DOM structure
 - `assets/js/brajesh-speeches.js`
   - real speeches app logic
+- `assets/js/rehearsal-logic.js`
+  - pure rehearsal cue parsing and timing logic used by the app and tests
 - `assets/js/brajesh-auth.js`
   - shared Supabase magic-link auth helper
 - `supabase/20260506143000_add_brajesh_speeches.sql`
@@ -162,13 +164,13 @@ Canonical Codex memory for this repo lives in `/Volumes/T7/kritika4/.codex/memor
 
 - Important: when speeches UI changes appear not to register after deploy, check for stale cached JS.
 - The speeches page currently cache-busts the module URL in `index.html`:
-  - `./assets/js/brajesh-speeches.js?v=20260609c`
+  - `./assets/js/brajesh-speeches.js?v=20260609d`
 - If future speeches JS changes appear missing in production, bump that query-string version.
 
 ## Tests
 
 - Run `npm run check` for the local syntax and regression checks.
-- The small Node test suite guards cache-bust consistency, fullscreen rehearsal cue layout, cue fit sizing, and remote navigation wiring.
+- The small Node test suite guards rehearsal parsing/timing logic, cache-bust consistency, fullscreen rehearsal cue layout, cue fit sizing, and remote navigation wiring.
 
 ## Useful Starting Point
 

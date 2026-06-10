@@ -1,6 +1,7 @@
 {
+  "type": "module",
   "scripts": {
-    "check": "node --check assets/js/brajesh-speeches.js && node --test tests/*.test.mjs",
+    "check": "node --check assets/js/brajesh-speeches.js && node --check assets/js/rehearsal-logic.js && node --test tests/*.test.mjs",
     "test": "node --test tests/*.test.mjs"
   }
 }

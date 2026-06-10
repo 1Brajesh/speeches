@@ -22,6 +22,10 @@ test("index cache-bust points at an existing speeches module and README matches 
   assert.ok(readme.includes(`./${scriptMatch[1]}`), "README cache note should match index.html");
 });
 
+test("browser app cache-busts extracted rehearsal logic import", () => {
+  assert.match(appJs, /from "\.\/rehearsal-logic\.js\?v=\d+[a-z]";/);
+});
+
 test("normal fullscreen cue playback anchors cues below the timer row", () => {
   const stageRule = cssRule('.fullscreen-body:not([data-intro-active="true"]):not([data-review-active="true"]) .fullscreen-stage');
   assert.match(stageRule, /grid-template-rows:\s*auto minmax\(0,\s*1fr\);/);
